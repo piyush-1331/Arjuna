@@ -12,6 +12,7 @@ import DoctorDashboard from "@/pages/DoctorDashboard";
 import FacilityStaffDashboard from "@/pages/FacilityStaffDashboard";
 import AdministratorDashboard from "@/pages/AdministratorDashboard";
 import FacilityMapPage from "@/pages/FacilityMapPage";
+import { Analytics } from "@vercel/analytics/react";
 
 // Authentication, Profile & Account Lifecycle Pages
 import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
@@ -83,6 +84,7 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <Router />
+          <Analytics />
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
