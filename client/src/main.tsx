@@ -15,10 +15,14 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (typeof window === "undefined") return;
 
   const isUnauthorized = error.message === UNAUTHED_ERR_MSG;
-
   if (!isUnauthorized) return;
 
-  window.location.assign("/");
+  const path = window.location.pathname.toLowerCase();
+  if (path === "/" || path.endsWith("/login") || path.endsWith("/arjuna") || path.endsWith("/arjuna/")) {
+    return;
+  }
+
+  window.location.assign("./");
 };
 
 queryClient.getQueryCache().subscribe(event => {
