@@ -667,8 +667,8 @@ export default function HealthcareFacilityMap({
 
   // Client-side Geodesic Ranking Engine (always works online & offline)
   const clientRankedResults = useMemo(() => {
-    return facilitiesPool
-      .map((fac) => {
+    return (facilitiesPool as any[])
+      .map((fac: any) => {
         const facLat = fac.latitude ?? 23.012;
         const facLng = fac.longitude ?? 72.3508;
         const distanceKm = calculateGeodesicDistanceKm(originCoords.lat, originCoords.lng, facLat, facLng);
@@ -688,8 +688,9 @@ export default function HealthcareFacilityMap({
 
         if (filterMedicine && filterMedicine.trim() !== "") {
           const reqClean = filterMedicine.toLowerCase().replace(/[^a-z0-9]/g, "");
-          const medMatch = (fac.inStockMedicines || []).find((m) =>
-            m.name.toLowerCase().replace(/[^a-z0-9]/g, "").includes(reqClean)
+          const medMatch = ((fac.inStockMedicines || []) as Array<{ name: string; status: any }>).find(
+            (m: { name: string; status: any }) =>
+              m.name.toLowerCase().replace(/[^a-z0-9]/g, "").includes(reqClean)
           );
 
           if (medMatch) {
@@ -706,7 +707,7 @@ export default function HealthcareFacilityMap({
         appropriatenessScore -= Math.min(40, Math.round(distanceKm * 0.8));
         // Specialty match boost
         if (selectedSpecialty !== "all") {
-          const hasSpec = (fac.specialties || []).some((s) =>
+          const hasSpec = ((fac.specialties || []) as string[]).some((s: string) =>
             s.toLowerCase().includes(selectedSpecialty.toLowerCase())
           );
           if (hasSpec) appropriatenessScore += 15;
@@ -731,8 +732,8 @@ export default function HealthcareFacilityMap({
           phone: fac.phone,
           latitude: fac.latitude,
           longitude: fac.longitude,
-          specialties: fac.specialties || [],
-          capabilities: fac.capabilities || [],
+          specialties: (fac.specialties || []) as string[],
+          capabilities: (fac.capabilities || []) as string[],
           emergencyCapability: emergencyCap,
           distanceKm,
           estimatedTravelMins,
@@ -741,13 +742,13 @@ export default function HealthcareFacilityMap({
           medicineStockStatus,
         };
       })
-      .filter((fac) => {
+      .filter((fac: any) => {
         // Apply filters
         if (selectedFacilityType !== "all" && fac.facilityType !== selectedFacilityType) {
           return false;
         }
         if (selectedSpecialty !== "all") {
-          const hasSpec = (fac.specialties || []).some((s) =>
+          const hasSpec = ((fac.specialties || []) as string[]).some((s: string) =>
             s.toLowerCase().includes(selectedSpecialty.toLowerCase())
           );
           if (!hasSpec) return false;
@@ -759,7 +760,7 @@ export default function HealthcareFacilityMap({
 
         return true;
       })
-      .sort((a, b) => a.distanceKm - b.distanceKm);
+      .sort((a: { distanceKm: number }, b: { distanceKm: number }) => a.distanceKm - b.distanceKm);
   }, [
     facilitiesPool,
     originCoords,
