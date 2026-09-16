@@ -655,6 +655,7 @@ Arjuna is configured with an automated **GitHub Actions** CI/CD pipeline (`.gith
    - `VITE_SUPABASE_PUBLISHABLE_KEY`: Your Supabase anon public key (`eyJ...`)
 4. Push a commit or trigger the **"Deploy Arjuna to GitHub Pages"** workflow manually from the **Actions** tab.
 5. GitHub will automatically build the static assets, configure SPA 404 routing, and publish your site at:
+
    ```text
    https://<username>.github.io/<repository-name>/
    ```
