@@ -1,5 +1,6 @@
-# 🏥 Arjuna (अर्जुन)
-> **Universal Healthcare Coordination, Clinical Decision Support & Spatial District Health Stack**
+# Arjuna (अर्जुन)
+
+> Universal Healthcare Coordination, Clinical Decision Support & Spatial District Health Stack
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19.2-cyan.svg)](https://react.dev/)
@@ -12,54 +13,58 @@
 
 ---
 
-## 📌 Table of Contents
-1. [Project Overview & Importance](#-project-overview--importance)
-2. [Key Architectural Innovations](#-key-architectural-innovations)
-3. [Role-Based Workspaces & Permissions Matrix](#-role-based-workspaces--permissions-matrix)
-4. [User Workflows & Capabilities ("What You Can & Cannot Do")](#-user-workflows--capabilities)
-   - [1. Citizen / Patient](#1-citizen--patient)
-   - [2. ASHA / CHO Frontline Health Worker](#2-asha--cho-frontline-health-worker)
-   - [3. Doctor / Medical Officer](#3-doctor--medical-officer)
-   - [4. Facility Staff / Pharmacist](#4-facility-staff--pharmacist)
-   - [5. District Health Administrator](#5-district-health-administrator)
-5. [Core System Engines & Modules](#-core-system-engines--modules)
-   - [Deterministic Triage & Hybrid Risk Engine](#-deterministic-triage--hybrid-risk-engine)
-   - [Multi-Factor Smart Referral Recommendation Engine](#-multi-factor-smart-referral-recommendation-engine)
-   - [Offline-First Synchronization Architecture](#-offline-first-synchronization-architecture)
-   - [Facility Medicine Inventory & Demand Forecasting](#-facility-medicine-inventory--demand-forecasting)
-   - [Spatial District Health Map & Village Accessibility Index](#-spatial-district-health-map--village-accessibility-index)
-   - [Multilingual Conversational Health Assistant](#-multilingual-conversational-health-assistant)
-6. [Account Lifecycle, Verification & Security Architecture](#-account-lifecycle-verification--security-architecture)
-7. [Technology Stack](#-technology-stack)
-8. [Project Directory Structure](#-project-directory-structure)
-9. [Getting Started (Local Development)](#-getting-started-local-development)
-10. [Database Schema & Migration Setup](#-database-schema--migration-setup)
-11. [Vercel & Production Deployment Guide](#-vercel--production-deployment-guide)
-12. [Automated Testing & Verification](#-automated-testing--verification)
-13. [Clinical Safety & Legal Disclaimer](#-clinical-safety--legal-disclaimer)
+## Table of Contents
+
+- [Project Overview & Importance](#project-overview--importance)
+- [Key Architectural Innovations](#key-architectural-innovations)
+- [Role-Based Workspaces & Permissions Matrix](#role-based-workspaces--permissions-matrix)
+- [User Workflows & Capabilities](#user-workflows--capabilities)
+  - [1. Citizen / Patient](#1-citizen--patient)
+  - [2. ASHA / CHO Frontline Health Worker](#2-asha--cho-frontline-health-worker)
+  - [3. Doctor / Medical Officer](#3-doctor--medical-officer)
+  - [4. Facility Staff / Pharmacist](#4-facility-staff--pharmacist)
+  - [5. District Health Administrator](#5-district-health-administrator)
+- [Core System Engines & Modules](#core-system-engines--modules)
+  - [Deterministic Triage & Hybrid Risk Engine](#deterministic-triage--hybrid-risk-engine)
+  - [Multi-Factor Smart Referral Recommendation Engine](#multi-factor-smart-referral-recommendation-engine)
+  - [Offline-First Synchronization Architecture](#offline-first-synchronization-architecture)
+  - [Facility Medicine Inventory & Demand Forecasting](#facility-medicine-inventory--demand-forecasting)
+  - [Spatial District Health Map & Village Accessibility Index](#spatial-district-health-map--village-accessibility-index)
+  - [Multilingual Conversational Health Assistant](#multilingual-conversational-health-assistant)
+- [Account Lifecycle, Verification & Security Architecture](#account-lifecycle-verification--security-architecture)
+- [Technology Stack](#technology-stack)
+- [Project Directory Structure](#project-directory-structure)
+- [Getting Started (Local Development)](#getting-started-local-development)
+- [Database Schema & Migration Setup](#database-schema--migration-setup)
+- [Vercel & Production Deployment Guide](#vercel--production-deployment-guide)
+- [Automated Testing & Verification](#automated-testing--verification)
+- [Clinical Safety & Legal Disclaimer](#clinical-safety--legal-disclaimer)
+- [License](#license)
 
 ---
 
-## 🌍 Project Overview & Importance
+## Project Overview & Importance
 
-### Why Arjuna?
+### Why Arjuna
+
 In India's public health ecosystem (spanning Ayushman Arogya Mandirs, Sub-Centres, PHCs, CHCs, Sub-District, and District Hospitals), healthcare delivery faces acute systemic friction:
+
 - **Fragmented Patient Records**: Citizens often lack portable clinical histories, resulting in repeated diagnostics and delayed emergency care.
-- **Frontline Disconnection**: ASHA (Accredited Social Health Activists) and CHO (Community Health Officers) conduct rigorous door-to-door screenings and maternal-child care in remote villages with unstable internet, relying on fragile paper registers.
+- **Frontline Disconnection**: ASHA (Accredited Social Health Activists) and CHO (Community Health Officers) conduct door-to-door screenings and maternal-child care in remote villages with unstable internet, relying on fragile paper registers.
 - **Inappropriate Specialist Overload**: Higher-tier hospitals (CHCs, District Hospitals) are bottlenecked with non-urgent cases due to a lack of deterministic triage at the grassroots level.
-- **Medicine Stockouts & Uneven Distribution**: Essential drug supplies run dry at rural health centres while surpluses expire in district warehouses due to lack of predictive demand modeling.
+- **Medicine Stockouts & Uneven Distribution**: Essential drug supplies run dry at rural health centres while surpluses expire in district warehouses due to a lack of predictive demand modeling.
 - **Administrative Blind Spots**: District health officers lack real-time epidemiological spatial intelligence and accessibility metrics for isolated rural hamlets.
 
 **Arjuna (अर्जुन)** is an end-to-end, role-aware healthcare coordination and clinical decision-support ecosystem designed to solve these exact challenges. It unifies citizens, frontline workers, clinicians, pharmacists, and district administrators into a single high-reliability network.
 
 ---
 
-## 🌟 Key Architectural Innovations
+## Key Architectural Innovations
 
 1. **Role-Aware Dual Security Layer**: Enforces strict role-based access control (RBAC) both at the UI layer and at the server procedure / database layer via Supabase Row-Level Security (RLS) and tRPC middleware.
 2. **Deterministic Emergency Safety Net**: Clinical red-flags (severe chest pain, SpO2 < 90%, altered sensorium, critical hypertension) trigger hard-coded emergency protocols **before** any AI text summarization is rendered.
 3. **0–100 Explainable Hybrid Risk Engine**: Computes transparent, auditable risk scores combining physiological vitals, chronic co-morbidities (hypertension, diabetes, cardiac conditions), and demographic risk factors with plain-language clinical explanations.
-4. **Multi-Factor Smart Referral Recommendation Engine**: Evaluates patient acuity against facility capability tiers (Sub-Centre → DH), real-time specialty availability, ICU/ventilator capacity, geographic distance (km), and estimated travel time.
+4. **Multi-Factor Smart Referral Recommendation Engine**: Evaluates patient acuity against facility capability tiers (Sub-Centre to District Hospital), real-time specialty availability, ICU/ventilator capacity, geographic distance (km), and estimated travel time.
 5. **Offline-First Synchronization Engine (IndexedDB)**: Allows frontline workers to record household surveys, patient visits, and screenings in zero-connectivity terrain, automatically replaying queued mutations with conflict resolution upon reconnection.
 6. **Predictive Medicine Demand Forecasting**: Leverages historical utilization and disease prevalence trends to project 30-day facility stock requirements and issue automated reorder alerts.
 7. **Spatial GIS District Health Intelligence**: Visualizes disease clustering, outbreak heatmaps, and a village transit vulnerability index based on road infrastructure and monsoon topography.
@@ -67,45 +72,49 @@ In India's public health ecosystem (spanning Ayushman Arogya Mandirs, Sub-Centre
 
 ---
 
-## 🛡️ Role-Based Workspaces & Permissions Matrix
+## Role-Based Workspaces & Permissions Matrix
 
 | Functional Area | Citizen | ASHA / CHO | Doctor | Facility Staff | Administrator |
-|---|:---:|:---:|:---:|:---:|:---:|
-| **View Personal & Family Health Records** | ✅ Full | ❌ (Own Village Only) | ❌ (Consult Queue Only) | ❌ | ❌ |
-| **Household Enumeration & Village Surveys** | ❌ | ✅ Full | ❌ | ❌ | 👁️ Read-Only |
-| **Vitals Recording & NCD Screening** | ❌ | ✅ Full | ✅ Full | ❌ | 👁️ Read-Only |
-| **Clinical Diagnosis & Notes** | ❌ | ❌ | ✅ Full | ❌ | 👁️ Read-Only |
-| **Electronic Prescription Issuance** | ❌ | ❌ | ✅ Full | ❌ | 👁️ Read-Only |
-| **Medicine Dispensing & Inventory Control** | ❌ | ❌ | ❌ | ✅ Full | 👁️ Read-Only |
-| **Specialist Referral Generation** | ❌ | ⚠️ (Triage Referral) | ✅ Full (Clinical Referral) | ❌ | 👁️ Read-Only |
-| **Follow-Up Directive Scheduling** | ❌ | ✅ Self / Assigned | ✅ Directive to ASHA | ❌ | 👁️ Read-Only |
-| **Staff Registration Verification & RBAC** | ❌ | ❌ | ❌ | ❌ | ✅ Full |
-| **District Epidemiology & Outbreak Heatmap** | ❌ | ❌ | 👁️ Facility Summary | 👁️ Facility Summary | ✅ Full |
-| **Medicine Demand Forecasting** | ❌ | ❌ | ❌ | ✅ Facility Level | ✅ District Level |
-| **Emergency Outbreak Escalation** | ❌ | ⚠️ Village Alert | ⚠️ Facility Alert | ❌ | ✅ District Command |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **View Personal & Family Health Records** | Yes | No (Own Village Only) | No (Consult Queue Only) | No | No |
+| **Household Enumeration & Village Surveys** | No | Yes | No | No | Read-Only |
+| **Vitals Recording & NCD Screening** | No | Yes | Yes | No | Read-Only |
+| **Clinical Diagnosis & Notes** | No | No | Yes | No | Read-Only |
+| **Electronic Prescription Issuance** | No | No | Yes | No | Read-Only |
+| **Medicine Dispensing & Inventory Control** | No | No | No | Yes | Read-Only |
+| **Specialist Referral Generation** | No | Triage Referral | Yes (Clinical Referral) | No | Read-Only |
+| **Follow-Up Directive Scheduling** | No | Yes (Assigned) | Yes (Directive to ASHA) | No | Read-Only |
+| **Staff Registration Verification & RBAC** | No | No | No | No | Yes |
+| **District Epidemiology & Outbreak Heatmap** | No | No | Facility Summary | Facility Summary | Yes |
+| **Medicine Demand Forecasting** | No | No | No | Facility Level | District Level |
+| **Emergency Outbreak Escalation** | No | Village Alert | Facility Alert | No | District Command |
 
 ---
 
-## 👥 User Workflows & Capabilities
+## User Workflows & Capabilities
 
 ---
 
 ### 1. Citizen / Patient
-*Workspace Route: `/dashboard/citizen`*
 
-#### 🎯 Primary Purpose:
+Workspace Route: `/dashboard/citizen`
+
+#### Citizen Primary Purpose
+
 Empowers individuals and families to take charge of their health, maintain lifetime longitudinal health records, book clinical appointments, and access trusted health guidance in their local language.
 
-#### ✅ What a Citizen CAN Do:
+#### Citizen Allowed Actions
+
 - **Digital Health Profile**: View and update personal health details, ABHA ID, blood group, known allergies, chronic conditions, and emergency contact.
 - **Family Member Health Records**: Manage linked household family profiles (children, elderly parents) from a unified dashboard.
 - **Longitudinal Visit History**: Inspect past doctor consultation notes, vital trends, diagnosis summaries, and clinical triage outcomes.
 - **Active Prescription & Medicine Tracker**: View current medications, prescribed dosages, frequency, and duration.
 - **Doctor Appointment Booking**: Search available doctors across nearby public facilities and request consultation slots.
 - **Nearby Healthcare Facility Directory**: Locate the nearest Ayushman Arogya Mandirs, PHCs, CHCs, and District Hospitals with contact details and operating hours.
-- **Multilingual AI Health Assistant**: Ask health questions in English, Hindi (हिंदी), or Gujarati (ગુજરાતી) with clear non-diagnostic lifestyle and first-aid support.
+- **Multilingual AI Health Assistant**: Ask health questions in English, Hindi, or Gujarati with clear non-diagnostic lifestyle and first-aid support.
 
-#### ❌ What a Citizen CANNOT Do:
+#### Citizen Prohibited Actions
+
 - Cannot modify clinical diagnoses, doctor consultation notes, or prescription records.
 - Cannot view other citizens' medical records outside their linked household.
 - Cannot self-authorize prescription refills without clinician sign-off.
@@ -114,12 +123,15 @@ Empowers individuals and families to take charge of their health, maintain lifet
 ---
 
 ### 2. ASHA / CHO Frontline Health Worker
-*Workspace Route: `/dashboard/asha_cho`*
 
-#### 🎯 Primary Purpose:
-Equips community health workers and mid-level health providers with digital tools for household survey enumeration, maternal-child tracking, NCD screening, deterministic risk triage, and home follow-ups—even when completely offline.
+Workspace Route: `/dashboard/asha_cho`
 
-#### ✅ What an ASHA / CHO CAN Do:
+#### ASHA and CHO Primary Purpose
+
+Equips community health workers and mid-level health providers with digital tools for household survey enumeration, maternal-child tracking, NCD screening, deterministic risk triage, and home follow-ups even when completely offline.
+
+#### ASHA and CHO Allowed Actions
+
 - **Village Household Enumeration**: Register new households, record family heads, geolocate dwellings, and map family members.
 - **Patient Registration & Vitals Check**: Register village residents and record core vitals (Systolic/Diastolic BP, SpO2, Heart Rate, Random Blood Glucose, Temperature, Weight).
 - **NCD Community Screenings**: Perform standardized screening for Hypertension, Type-2 Diabetes, Oral/Cervical cancer risk flags, and ANC/PNC maternal checkups.
@@ -128,7 +140,8 @@ Equips community health workers and mid-level health providers with digital tool
 - **Follow-Up Directive Execution**: View assigned home follow-up tasks, track due dates, record patient recovery status, and mark tasks complete.
 - **Offline Data Entry & Sync**: Continue all data entry in remote villages without internet; sync queued records to the district server upon returning to mobile network coverage.
 
-#### ❌ What an ASHA / CHO CANNOT Do:
+#### ASHA and CHO Prohibited Actions
+
 - Cannot prescribe schedule-H prescription drugs or modify doctor-issued electronic prescriptions.
 - Cannot sign off on official discharge summaries or formal diagnostic lab reports.
 - Cannot view patient records assigned to other villages outside their designated catchment area.
@@ -137,20 +150,24 @@ Equips community health workers and mid-level health providers with digital tool
 ---
 
 ### 3. Doctor / Medical Officer
-*Workspace Route: `/dashboard/doctor`*
 
-#### 🎯 Primary Purpose:
+Workspace Route: `/dashboard/doctor`
+
+#### Doctor Primary Purpose
+
 Provides clinical decision support, outpatient department (OPD) queue management, structured diagnostic documentation, electronic prescribing, and smart multi-factor specialist escalation.
 
-#### ✅ What a Doctor CAN Do:
+#### Doctor Allowed Actions
+
 - **OPD Consultation Queue**: View incoming triage-prioritized patient queues with color-coded risk flags.
 - **Comprehensive Patient Clinical Timeline**: Access past vitals history, ASHA screening notes, previous admissions, allergies, and chronic conditions before examining the patient.
 - **Clinical Consultation Documentation**: Record structured examination findings, differential diagnoses, and consultation notes.
 - **Electronic Prescription Authorizations**: Create structured digital prescriptions with drug name, dosage form, frequency (OD, BD, TDS), duration, and pharmacist dispensing instructions.
 - **Multi-Factor Smart Specialist Referrals**: Escalate patients requiring higher-tier care with intelligent facility matching (based on specialty, ICU bed availability, and travel distance).
-- **Follow-up Directives for ASHA Workers**: Schedule structured home follow-up tasks (e.g., "Check BP on Day 3 post-medication") automatically routed to the patient's village ASHA worker.
+- **Follow-up Directives for ASHA Workers**: Schedule structured home follow-up tasks (such as checking BP on Day 3 post-medication) automatically routed to the patient's village ASHA worker.
 
-#### ❌ What a Doctor CANNOT Do:
+#### Doctor Prohibited Actions
+
 - Cannot edit pharmacy stock levels directly (must be dispensed via pharmacy inventory).
 - Cannot approve or reject staff onboarding applications (restricted to Administrator).
 - Cannot access system configuration or audit log management consoles.
@@ -158,12 +175,15 @@ Provides clinical decision support, outpatient department (OPD) queue management
 ---
 
 ### 4. Facility Staff / Pharmacist
-*Workspace Route: `/dashboard/facility_staff`*
 
-#### 🎯 Primary Purpose:
+Workspace Route: `/dashboard/facility_staff`
+
+#### Facility Staff Primary Purpose
+
 Manages facility-level medicine inventories, monitors drug supply chains, dispenses electronic prescriptions, and tracks batch expiry and stockout risks.
 
-#### ✅ What Facility Staff CAN Do:
+#### Facility Staff Allowed Actions
+
 - **Medicine & Consumables Stock Tracking**: Monitor real-time on-hand quantities across all essential drug categories (Antibiotics, Antihypertensives, Analgesics, IV Fluids, Vaccines).
 - **Batch & Expiry Date Management**: Track batch numbers, manufacturing dates, and receive automated alerts for near-expiry medications.
 - **Automated Low-Stock & Reorder Alerts**: Visual warning indicators triggered when stock drops below safety reorder thresholds.
@@ -171,7 +191,8 @@ Manages facility-level medicine inventories, monitors drug supply chains, dispen
 - **Inter-Facility Stock Discovery**: Search nearby public health facilities to locate surplus stock during localized shortages.
 - **Facility-Level Demand Forecasts**: Review 30-day projected medicine consumption rates to prepare procurement indents.
 
-#### ❌ What Facility Staff CANNOT Do:
+#### Facility Staff Prohibited Actions
+
 - Cannot alter medical diagnoses or modify doctor-prescribed drug regimens.
 - Cannot perform clinical patient examinations or create referrals.
 - Cannot access district-wide staff management or administrative consoles.
@@ -179,30 +200,36 @@ Manages facility-level medicine inventories, monitors drug supply chains, dispen
 ---
 
 ### 5. District Health Administrator
-*Workspace Route: `/dashboard/administrator`*
 
-#### 🎯 Primary Purpose:
+Workspace Route: `/dashboard/administrator`
+
+#### Administrator Primary Purpose
+
 Serves as the central command authority for district health management, staff credential verification, epidemiological surveillance, resource allocation, and regulatory compliance.
 
-#### ✅ What an Administrator CAN Do:
-- **Staff Credential Verification Console**: Review incoming ASHA, CHO, Doctor, and Facility Staff registrations; inspect employee IDs, professional registration numbers, assigned facilities, and grant **Approve**, **Reject**, or **Suspend** status.
+#### Administrator Allowed Actions
+
+- **Staff Credential Verification Console**: Review incoming ASHA, CHO, Doctor, and Facility Staff registrations; inspect employee IDs, professional registration numbers, assigned facilities, and grant Approve, Reject, or Suspend status.
 - **District Health Intelligence Command Center**: Monitor real-time caseloads, disease incidence rates, active referrals, and high-risk case clusters across all talukas and villages.
-- **Spatial Epidemiological Heatmap**: Identify disease outbreaks (e.g., Dengue, Malaria, Gastroenteritis clusters) and geographic risk distributions.
-- **District-Wide Medicine Demand Modeling**: Inspect AI-assisted 30-day drug consumption forecasts across all PHCs and CHCs to prevent stockouts.
+- **Spatial Epidemiological Heatmap**: Identify disease outbreaks (such as Dengue, Malaria, Gastroenteritis clusters) and geographic risk distributions.
+- **District-Wide Medicine Demand Modeling**: Inspect 30-day drug consumption forecasts across all PHCs and CHCs to prevent stockouts.
 - **Village Accessibility & Vulnerability Matrix**: Analyze transit times, road quality, and monsoon-isolated villages to optimize mobile health van deployments.
 - **Regulatory Audit Trail & Event Logging**: Audit all security, clinical, and data mutation events with timestamps, actor IDs, and IP attribution.
 
-#### ❌ What an Administrator CANNOT Do:
+#### Administrator Prohibited Actions
+
 - Cannot self-create additional administrator accounts from the frontend (restricted strictly to server-side CLI seeding).
 - Cannot alter clinical consultation notes or overwrite patient vital signs directly.
 
 ---
 
-## ⚙️ Core System Engines & Modules
+## Core System Engines & Modules
 
-### 🧠 Deterministic Triage & Hybrid Risk Engine
+### Deterministic Triage & Hybrid Risk Engine
+
 Arjuna decouples deterministic patient safety from generative language models:
-```
+
+```text
 [ Patient Vitals & Symptoms ]
             │
             ▼
@@ -227,46 +254,51 @@ Arjuna decouples deterministic patient safety from generative language models:
 
 ---
 
-### 🚑 Multi-Factor Smart Referral Recommendation Engine
+### Multi-Factor Smart Referral Recommendation Engine
+
 When a patient requires referral, Arjuna executes a multi-factor recommendation algorithm:
-$$\text{Score}(F) = w_1 \cdot \text{SpecialtyMatch} + w_2 \cdot \text{TierAdequacy} + w_3 \cdot \text{BedAvailability} - w_4 \cdot \text{DistanceKm}$$
 
 - **Specialty Alignment**: Confirms target facility has active departments (Cardiology, Obstetrics, Pediatrics, etc.).
-- **Capability Tier**: Matches severity to appropriate tier (Sub-Centre $\rightarrow$ PHC $\rightarrow$ CHC $\rightarrow$ SDH $\rightarrow$ District Hospital).
+- **Capability Tier**: Matches severity to appropriate tier (Sub-Centre to District Hospital).
 - **Real-Time Resource Verification**: Evaluates oxygen beds, ICU beds, and ventilator status.
 - **Transit Estimation**: Computes geodesic distance and estimated ambulance transit time.
 
 ---
 
-### 📶 Offline-First Synchronization Architecture
+### Offline-First Synchronization Architecture
+
 Frontline healthcare workers often serve in disconnected tribal and rural areas:
+
 - **Local Database**: IndexedDB stores household records, patient entries, vital checks, and follow-ups.
 - **State Machine**: Displays real-time `ONLINE`, `OFFLINE`, or `SYNCING` badges with a pending mutation count.
 - **Background Replay**: On network reconnect, queued actions are replayed in chronological order with idempotent server endpoints.
 
 ---
 
-### 📦 Facility Medicine Inventory & Demand Forecasting
-- **Dynamic Reorder Calculation**: $\text{ReorderLevel} = (\text{AvgDailyConsumption} \times \text{LeadTimeDays}) + \text{SafetyStock}$
-- **Predictive Demand Modeling**: Leverages historical seasonal trends (e.g., monsoon spikes in ORS and antimalarials) to forecast 30-day facility medicine requirements.
+### Facility Medicine Inventory & Demand Forecasting
+
+- **Dynamic Reorder Calculation**: Evaluates average daily consumption, lead time in days, and safety stock thresholds.
+- **Predictive Demand Modeling**: Leverages historical seasonal trends (such as monsoon spikes in ORS and antimalarials) to forecast 30-day facility medicine requirements.
 
 ---
 
-### 🗺️ Spatial District Health Map & Village Accessibility Index
+### Spatial District Health Map & Village Accessibility Index
+
 - **Interactive Leaflet GIS Map**: Displays geolocated facilities, active referrals, and disease clusters.
 - **Village Vulnerability Rating**: Scores villages based on distance to nearest PHC (km), paved vs unpaved road access, and monsoon cutoff risk.
 
 ---
 
-### 🌐 Multilingual Conversational Health Assistant
+### Multilingual Conversational Health Assistant
+
 - **Supported Languages**: English, Hindi (हिंदी), Gujarati (ગુજરાતી).
-- **Clinical Safety Boundaries**: Grounded exclusively in approved public health guidelines (NHM / WHO); strictly disclaims diagnostic authority and directs emergencies to local healthcare workers.
+- **Clinical Safety Boundaries**: Grounded exclusively in approved public health guidelines; strictly disclaims diagnostic authority and directs emergencies to local healthcare workers.
 
 ---
 
-## 🔐 Account Lifecycle, Verification & Security Architecture
+## Account Lifecycle, Verification & Security Architecture
 
-```
+```text
 [ Citizen Sign-Up ] ────────► Status: APPROVED ────────► Immediate Dashboard Access
                                                      
 [ Staff Sign-Up ]   ────────► Status: PENDING  ────────► /pending-approval (Access Blocked)
@@ -284,10 +316,10 @@ Frontline healthcare workers often serve in disconnected tribal and rural areas:
 
 ---
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 | Layer | Technology | Purpose |
-|---|---|---|
+| :--- | :--- | :--- |
 | **Frontend Framework** | **React 19** + **TypeScript** | Ultra-responsive, type-safe user interface |
 | **Styling & Design System** | **Tailwind CSS v4** + **Radix UI** | Tokenized dark/light/system theme, accessible UI primitives |
 | **Routing** | **Wouter Router** | Lightweight, performant client-side routing |
@@ -302,9 +334,9 @@ Frontline healthcare workers often serve in disconnected tribal and rural areas:
 
 ---
 
-## 📁 Project Directory Structure
+## Project Directory Structure
 
-```
+```text
 Arjuna/
 ├── api/                            # Vercel Serverless Function entrypoint
 │   └── index.ts                    # Express app bridge for Vercel
@@ -368,14 +400,16 @@ Arjuna/
 
 ---
 
-## 🚀 Getting Started (Local Development)
+## Getting Started (Local Development)
 
 ### 1. Prerequisites
+
 - **Node.js**: v20.0 or higher
 - **npm** or **pnpm**
-- A **Supabase** account (Free tier works perfectly)
+- A **Supabase** account (Free tier works)
 
 ### 2. Clone Repository & Install Dependencies
+
 ```bash
 git clone https://github.com/piyush-1331/Arjuna.git
 cd Arjuna
@@ -383,6 +417,7 @@ npm install --legacy-peer-deps
 ```
 
 ### 3. Configure Environment Variables
+
 Create a `.env` file in the root directory:
 
 ```env
@@ -409,7 +444,7 @@ ADMIN_EMAIL=admin@arjuna.health
 
 ---
 
-## 🗄️ Database Schema & Migration Setup
+## Database Schema & Migration Setup
 
 Execute the schema setup in your **Supabase Dashboard** $\rightarrow$ **SQL Editor**:
 
@@ -590,26 +625,31 @@ CREATE TABLE IF NOT EXISTS public.audit_events (
 ```
 
 ### 4. Seed the District Administrator
+
 Create or promote your primary administrator account via the CLI:
+
 ```bash
 npm run seed:admin
 ```
 
 ### 5. Start the Development Server
+
 ```bash
 npm run dev
 ```
+
 Open **[http://localhost:3000](http://localhost:3000)** in your browser.
 
 ---
 
-## ☁️ Vercel & Production Deployment Guide
+## Vercel & Production Deployment Guide
 
 Arjuna is pre-configured for zero-friction serverless deployment on **Vercel** with full client SPA routing and Express/tRPC API rewrites via [`vercel.json`](file:///c:/Users/Piyush/OneDrive/Documents/Arjuna/vercel.json) and [`api/index.ts`](file:///c:/Users/Piyush/OneDrive/Documents/Arjuna/api/index.ts).
 
-### Step-by-Step Vercel Setup:
+### Step-by-Step Vercel Setup
+
 1. Push your repository to **GitHub**.
-2. Log in to [Vercel](https://vercel.com) and click **"Add New Project"** $\rightarrow$ select your `Arjuna` repository.
+2. Log in to [Vercel](https://vercel.com) and click **"Add New Project"** and select your `Arjuna` repository.
 3. In the **Configure Project** screen:
    - **Framework Preset**: `Vite` (or `Other`)
    - **Build Command**: `vite build`
@@ -625,7 +665,7 @@ Arjuna is pre-configured for zero-friction serverless deployment on **Vercel** w
 
 ---
 
-## 🧪 Automated Testing & Verification
+## Automated Testing & Verification
 
 Arjuna includes a comprehensive test suite covering RBAC authorization, clinical triage rules, hybrid risk scoring, medicine demand forecasting, and offline synchronization.
 
@@ -639,7 +679,7 @@ npm run check
 
 ---
 
-## ⚠️ Clinical Safety & Legal Disclaimer
+## Clinical Safety & Legal Disclaimer
 
 > **IMPORTANT MEDICAL NOTICE**:
 > Arjuna is an assistive healthcare workflow, clinical coordination, and operational decision-support tool. It is **NOT** a certified diagnostic medical device, software as a medical device (SaMD), or a replacement for clinical examination by a qualified medical practitioner.
@@ -649,5 +689,6 @@ npm run check
 
 ---
 
-## 📄 License
+## License
+
 This project is open-source and licensed under the [MIT License](LICENSE).
