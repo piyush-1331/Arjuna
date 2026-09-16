@@ -7,11 +7,15 @@ const client = () => {
 };
 const date = (value: unknown) => (value ? new Date(String(value)) : value);
 const dateOrNull = (value: unknown) => (value ? new Date(String(value)) : null);
-const unwrap = <T>(result: { data: T; error: { message: string } | null }): T => {
-  if (result.error) throw new Error(result.error.message);
-  return result.data;
+const unwrap = <T = any>(result: any): T => {
+  if (result && result.error) throw new Error(result.error.message || String(result.error));
+  return (result?.data ?? result) as T;
 };
-const many = <T>(rows: T[] | null | undefined) => rows ?? [];
+const many = <T = any>(rows: any): T[] => {
+  if (Array.isArray(rows)) return rows as T[];
+  if (rows && Array.isArray(rows.data)) return rows.data as T[];
+  return (rows ?? []) as T[];
+};
 
 export function mapUser(row: any, meta?: any) {
   if (!row) return undefined;
@@ -515,16 +519,18 @@ export async function getDashboardMetrics(district?: string) {
     client().from("medicines").select("id,current_stock,reorder_level").limit(1000),
     client().from("facilities").select("id,district").limit(1000),
   ]);
-  const patients = many(unwrap(p)).filter(row => !district || row.district === district);
-  const facilityRows = many(unwrap(facilities)).filter(row => !district || row.district === district);
-  const referralRows = many(unwrap(r)); const followUps = many(unwrap(f)); const medicines = many(unwrap(m));
+  const patients: any[] = many(unwrap(p)).filter((row: any) => !district || row.district === district);
+  const facilityRows: any[] = many(unwrap(facilities)).filter((row: any) => !district || row.district === district);
+  const referralRows: any[] = many(unwrap(r));
+  const followUps: any[] = many(unwrap(f));
+  const medicines: any[] = many(unwrap(m));
   return {
     patients: patients.length,
-    highRisk: patients.filter(row => ["high", "critical"].includes(row.risk_category)).length,
-    referrals: referralRows.filter(row => !["completed", "cancelled"].includes(row.status)).length,
-    openFollowUps: followUps.filter(row => row.status === "open").length,
-    overdueFollowUps: followUps.filter(row => row.status === "overdue" || (row.status === "open" && new Date(row.due_at) < new Date())).length,
-    lowStock: medicines.filter(row => Number(row.current_stock) <= Number(row.reorder_level)).length,
+    highRisk: patients.filter((row: any) => ["high", "critical"].includes(row.risk_category)).length,
+    referrals: referralRows.filter((row: any) => !["completed", "cancelled"].includes(row.status)).length,
+    openFollowUps: followUps.filter((row: any) => row.status === "open").length,
+    overdueFollowUps: followUps.filter((row: any) => row.status === "overdue" || (row.status === "open" && new Date(row.due_at) < new Date())).length,
+    lowStock: medicines.filter((row: any) => Number(row.current_stock) <= Number(row.reorder_level)).length,
     facilities: facilityRows.length,
   };
 }
@@ -537,12 +543,12 @@ export async function createReferral(input: Record<string, unknown>) { return in
 export async function getReferrals(patientId?: number) {
   const query = client().from("referrals").select("*").order("created_at", { ascending: false });
   const result = patientId ? await query.eq("patient_id", patientId) : await query;
-  return many(unwrap(result)).map(mapReferral);
+  return many<any>(unwrap(result)).map(mapReferral);
 }
 export async function getVisits(patientId?: number) {
   const query = client().from("health_visits").select("*").order("created_at", { ascending: false });
   const result = patientId ? await query.eq("patient_id", patientId) : await query;
-  return many(unwrap(result)).map(mapVisit);
+  return many<any>(unwrap(result)).map(mapVisit);
 }
 export async function getReferralById(id: number) { return mapReferral(unwrap(await client().from("referrals").select("*").eq("id", id).maybeSingle())); }
 export async function updateReferral(id: number, values: Record<string, unknown>) { unwrap(await client().from("referrals").update(insertPayload(values)).eq("id", id)); }
@@ -569,7 +575,7 @@ export async function cancelFollowUp(id: number, cancellationReason: string) {
 export async function updateMedicine(id: number, currentStock: number) { unwrap(await client().from("medicines").update({ current_stock: currentStock, updated_at: new Date().toISOString() }).eq("id", id)); }
 
 export async function seedDemoData() {
-  const count = many(unwrap(await client().from("patients").select("id").limit(1)));
+  const count: any[] = many(unwrap(await client().from("patients").select("id").limit(1)));
   if (count.length) return;
   const facility = await insertId("facilities", { name: "Sundarpur Primary Health Centre", facility_type: "phc", district: "Ahmedabad Rural", village: "Sundarpur", address: "Main Road, Sundarpur", phone: "+91 79 2456 1020", capabilities: "General medicine, maternal care, diagnostics" });
   const household = await insertId("households", { head_name: "Meena Patel", village: "Sundarpur", district: "Ahmedabad Rural", contact: "+91 98 2211 4400" });
