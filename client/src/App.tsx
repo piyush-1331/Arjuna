@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Router as WouterRouter, Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import LoginPage from "@/pages/LoginPage";
@@ -23,7 +23,21 @@ import RegistrationRejectedPage from "@/pages/RegistrationRejectedPage";
 import AccountSuspendedPage from "@/pages/AccountSuspendedPage";
 import AccessDeniedPage from "@/pages/AccessDeniedPage";
 
-function Router() {
+export function getRouterBase(): string {
+  if (typeof window === "undefined") return "";
+  const pathname = window.location.pathname;
+  // If hosted on GitHub Pages (e.g., /Arjuna or /Arjuna/...)
+  const match = pathname.match(/^(\/[a-zA-Z0-9_-]+)/);
+  if (window.location.hostname.endsWith("github.io") && match) {
+    return match[1];
+  }
+  if (pathname.toLowerCase().startsWith("/arjuna")) {
+    return "/Arjuna";
+  }
+  return "";
+}
+
+function AppRoutes() {
   return (
     <Switch>
       {/* Public & Entry Routes - Shows Login page first on browser launch */}
@@ -77,12 +91,16 @@ function Router() {
 }
 
 function App() {
+  const base = getRouterBase();
+
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
         <TooltipProvider>
           <Toaster />
-          <Router />
+          <WouterRouter base={base}>
+            <AppRoutes />
+          </WouterRouter>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
