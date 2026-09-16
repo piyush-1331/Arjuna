@@ -36,7 +36,7 @@
 - [Project Directory Structure](#project-directory-structure)
 - [Getting Started (Local Development)](#getting-started-local-development)
 - [Database Schema & Migration Setup](#database-schema--migration-setup)
-- [Vercel & Production Deployment Guide](#vercel--production-deployment-guide)
+- [Deployment Guide](#deployment-guide)
 - [Automated Testing & Verification](#automated-testing--verification)
 - [Clinical Safety & Legal Disclaimer](#clinical-safety--legal-disclaimer)
 - [License](#license)
@@ -642,11 +642,26 @@ Open **[http://localhost:3000](http://localhost:3000)** in your browser.
 
 ---
 
-## Vercel & Production Deployment Guide
+## Deployment Guide
 
-Arjuna is pre-configured for zero-friction serverless deployment on **Vercel** with full client SPA routing and Express/tRPC API rewrites via [`vercel.json`](file:///c:/Users/Piyush/OneDrive/Documents/Arjuna/vercel.json) and [`api/index.ts`](file:///c:/Users/Piyush/OneDrive/Documents/Arjuna/api/index.ts).
+### GitHub Pages Deployment (Static Web App)
 
-### Step-by-Step Vercel Setup
+Arjuna is configured with an automated **GitHub Actions** CI/CD pipeline (`.github/workflows/deploy.yml`) that builds and deploys the application directly to **GitHub Pages**:
+
+1. In your GitHub repository, go to **Settings** $\rightarrow$ **Pages**.
+2. Under **Build and deployment** $\rightarrow$ **Source**, select **`GitHub Actions`**.
+3. Go to **Settings** $\rightarrow$ **Secrets and variables** $\rightarrow$ **Actions**, and add the following repository secrets:
+   - `VITE_SUPABASE_URL`: Your Supabase API URL (`https://[project-ref].supabase.co`)
+   - `VITE_SUPABASE_PUBLISHABLE_KEY`: Your Supabase anon public key (`eyJ...`)
+4. Push a commit or trigger the **"Deploy Arjuna to GitHub Pages"** workflow manually from the **Actions** tab.
+5. GitHub will automatically build the static assets, configure SPA 404 routing, and publish your site at:
+   ```text
+   https://<username>.github.io/<repository-name>/
+   ```
+
+### Vercel Serverless Deployment (Alternative)
+
+If deploying to Vercel with serverless Express/tRPC API endpoints:
 
 1. Push your repository to **GitHub**.
 2. Log in to [Vercel](https://vercel.com) and click **"Add New Project"** and select your `Arjuna` repository.
@@ -654,14 +669,8 @@ Arjuna is pre-configured for zero-friction serverless deployment on **Vercel** w
    - **Framework Preset**: `Vite` (or `Other`)
    - **Build Command**: `vite build`
    - **Output Directory**: `dist/public`
-4. Under **Environment Variables**, click **`Import .env`** and paste your `.env` values, or manually add:
-   - `DATABASE_URL` = `postgresql://postgres:...@db...`
-   - `VITE_SUPABASE_URL` = `https://[project-ref].supabase.co`
-   - `VITE_SUPABASE_PUBLISHABLE_KEY` = `eyJhbGciOi...`
-   - `SUPABASE_SERVICE_ROLE_KEY` = `eyJhbGciOi...`
-   - `JWT_SECRET` = `your-32-char-jwt-secret`
-   - `NODE_ENV` = `production`
-5. Click **"Deploy"**. Vercel will bundle the React frontend and deploy the Express API backend as serverless functions.
+4. Under **Environment Variables**, click **`Import .env`** and paste your `.env` values (`DATABASE_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, `NODE_ENV=production`).
+5. Click **"Deploy"**.
 
 ---
 
