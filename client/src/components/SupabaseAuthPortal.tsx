@@ -52,10 +52,10 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
-  const [district, setDistrict] = useState("Nandurbar");
+  const [district, setDistrict] = useState("");
   const [village, setVillage] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
-  const [gender, setGender] = useState("female");
+  const [gender, setGender] = useState("");
   const [emergencyContactName, setEmergencyContactName] = useState("");
   const [emergencyContactPhone, setEmergencyContactPhone] = useState("");
 
@@ -102,6 +102,14 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
   const handleCitizenRegister = async () => {
     if (!supabase) {
       toast.error("Supabase is not configured for this environment.");
+      return;
+    }
+    if (!district) {
+      toast.error("Please select your district.");
+      return;
+    }
+    if (!gender) {
+      toast.error("Please select your gender.");
       return;
     }
     const err = validateSupabaseCredentials({
@@ -175,6 +183,10 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
   const handleStaffRegister = async () => {
     if (!supabase) {
       toast.error("Supabase is not configured for this environment.");
+      return;
+    }
+    if (!district) {
+      toast.error("Please select your district.");
       return;
     }
     const err = validateSupabaseCredentials({
@@ -451,32 +463,48 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700">City / Village / Taluka</Label>
-                    <Input
-                      list="citizen-registration-cities"
-                      placeholder="e.g. Pune City, Karanji, Shahada"
-                      value={village}
-                      onChange={(e) => setVillage(e.target.value)}
-                      className="rounded-2xl bg-slate-50 border-slate-200 h-10 text-xs"
-                    />
-                    <datalist id="citizen-registration-cities">
-                      {getCitiesForDistrict(district).map((city) => (
-                        <option key={city} value={city} />
-                      ))}
-                    </datalist>
-                  </div>
-                  <div className="space-y-1.5">
                     <Label className="text-xs font-bold text-slate-700">District (Maharashtra) *</Label>
                     <select
                       value={district}
-                      onChange={(e) => setDistrict(e.target.value)}
-                      className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium focus:bg-white"
+                      onChange={(e) => {
+                        setDistrict(e.target.value);
+                        setVillage("");
+                      }}
+                      className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium focus:bg-white text-slate-900"
                     >
+                      <option value="">Select District</option>
                       {MAHARASHTRA_DISTRICTS.map((dist) => (
                         <option key={dist} value={dist}>
                           {dist}
                         </option>
                       ))}
+                    </select>
+                  </div>
+                  <div
+                    className="space-y-1.5 relative cursor-pointer"
+                    onClickCapture={(e) => {
+                      if (!district) {
+                        e.stopPropagation();
+                        toast.error("Please select a district first");
+                      }
+                    }}
+                  >
+                    <Label className="text-xs font-bold text-slate-700">City / Village / Taluka</Label>
+                    <select
+                      value={village}
+                      disabled={!district}
+                      onChange={(e) => setVillage(e.target.value)}
+                      className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed text-slate-900"
+                    >
+                      <option value="">{district ? "Select City / Village / Taluka" : "Please select district first"}</option>
+                      {district && getCitiesForDistrict(district).map((city) => (
+                        <option key={city} value={city}>
+                          {city}
+                        </option>
+                      ))}
+                      {village && district && !getCitiesForDistrict(district).includes(village) && (
+                        <option value={village}>{village}</option>
+                      )}
                     </select>
                   </div>
                 </div>
@@ -496,8 +524,9 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
                     <select
                       value={gender}
                       onChange={(e) => setGender(e.target.value)}
-                      className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium"
+                      className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium focus:bg-white text-slate-900"
                     >
+                      <option value="">Select Gender</option>
                       <option value="female">Female</option>
                       <option value="male">Male</option>
                       <option value="other">Other</option>
@@ -652,6 +681,25 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
                   </div>
                 </div>
 
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-slate-700">District (Maharashtra) *</Label>
+                  <select
+                    value={district}
+                    onChange={(e) => {
+                      setDistrict(e.target.value);
+                      setAssignedVillage("");
+                    }}
+                    className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium focus:bg-white text-slate-900"
+                  >
+                    <option value="">Select District</option>
+                    {MAHARASHTRA_DISTRICTS.map((dist) => (
+                      <option key={dist} value={dist}>
+                        {dist}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 {/* Role Specific Dynamic Fields */}
                 {staffRole === "doctor" && (
                   <div className="grid grid-cols-2 gap-3">
@@ -688,15 +736,32 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
                         className="rounded-2xl bg-slate-50 border-slate-200 h-10 text-xs"
                       />
                     </div>
-                    <div className="space-y-1.5">
+                    <div
+                      className="space-y-1.5 relative cursor-pointer"
+                      onClickCapture={(e) => {
+                        if (!district) {
+                          e.stopPropagation();
+                          toast.error("Please select a district first");
+                        }
+                      }}
+                    >
                       <Label className="text-xs font-bold text-slate-700">Assigned Village *</Label>
-                      <Input
-                        required
-                        placeholder="Karanji Budruk"
+                      <select
                         value={assignedVillage}
+                        disabled={!district}
                         onChange={(e) => setAssignedVillage(e.target.value)}
-                        className="rounded-2xl bg-slate-50 border-slate-200 h-10 text-xs"
-                      />
+                        className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed text-slate-900"
+                      >
+                        <option value="">{district ? "Select Assigned Village / Taluka" : "Please select district first"}</option>
+                        {district && getCitiesForDistrict(district).map((city) => (
+                          <option key={city} value={city}>
+                            {city}
+                          </option>
+                        ))}
+                        {assignedVillage && district && !getCitiesForDistrict(district).includes(assignedVillage) && (
+                          <option value={assignedVillage}>{assignedVillage}</option>
+                        )}
+                      </select>
                     </div>
                   </div>
                 )}
@@ -746,21 +811,6 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
                     </div>
                   </div>
                 )}
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-slate-700">District (Maharashtra) *</Label>
-                  <select
-                    value={district}
-                    onChange={(e) => setDistrict(e.target.value)}
-                    className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium focus:bg-white"
-                  >
-                    {MAHARASHTRA_DISTRICTS.map((dist) => (
-                      <option key={dist} value={dist}>
-                        {dist}
-                      </option>
-                    ))}
-                  </select>
-                </div>
 
                 {/* Password & Confirmation */}
                 <div className="space-y-1.5">

@@ -81,9 +81,9 @@ export default function ProfilePage() {
   const [phone, setPhone] = useState(currentUser?.phone || "");
   const [dateOfBirth, setDateOfBirth] = useState(currentUser?.dateOfBirth || "");
   const [age, setAge] = useState<number | string>(currentUser?.age ?? "");
-  const [gender, setGender] = useState(currentUser?.gender || "female");
+  const [gender, setGender] = useState(currentUser?.gender || "");
   const [village, setVillage] = useState(currentUser?.village || "");
-  const [district, setDistrict] = useState(currentUser?.district || "Ahmedabad Rural");
+  const [district, setDistrict] = useState(currentUser?.district || "");
   const [address, setAddress] = useState(currentUser?.address || "");
   const [pincode, setPincode] = useState(currentUser?.pincode || "");
   const [emergencyContactName, setEmergencyContactName] = useState(currentUser?.emergencyContactName || "");
@@ -99,9 +99,9 @@ export default function ProfilePage() {
       setPhone(currentUser.phone || "");
       setDateOfBirth(currentUser.dateOfBirth || "");
       setAge(currentUser.age ?? "");
-      setGender(currentUser.gender || "female");
+      setGender(currentUser.gender || "");
       setVillage(currentUser.village || "");
-      setDistrict(currentUser.district || "Ahmedabad Rural");
+      setDistrict(currentUser.district || "");
       setAddress(currentUser.address || "");
       setPincode(currentUser.pincode || "");
       setEmergencyContactName(currentUser.emergencyContactName || "");
@@ -509,6 +509,7 @@ export default function ProfilePage() {
                         onChange={(e) => setGender(e.target.value)}
                         className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium focus:bg-white"
                       >
+                        <option value="">Select Gender</option>
                         <option value="female">Female</option>
                         <option value="male">Male</option>
                         <option value="other">Other</option>
@@ -582,33 +583,49 @@ export default function ProfilePage() {
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-bold text-slate-700">City / Village / Taluka</Label>
-                      <Input
-                        list="profile-page-cities"
-                        value={village}
-                        onChange={(e) => setVillage(e.target.value)}
-                        placeholder="e.g. Pune City, Karanji Budruk, Shahada"
-                        className="rounded-2xl border-slate-200 bg-slate-50 h-11 text-sm focus:bg-white"
-                      />
-                      <datalist id="profile-page-cities">
-                        {getCitiesForDistrict(district).map((city) => (
-                          <option key={city} value={city} />
-                        ))}
-                      </datalist>
-                    </div>
-
-                    <div className="space-y-1.5">
                       <Label className="text-xs font-bold text-slate-700">District (Maharashtra)</Label>
                       <select
                         value={district}
-                        onChange={(e) => setDistrict(e.target.value)}
+                        onChange={(e) => {
+                          setDistrict(e.target.value);
+                          setVillage("");
+                        }}
                         className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium focus:bg-white"
                       >
+                        <option value="">Select District</option>
                         {MAHARASHTRA_DISTRICTS.map((d) => (
                           <option key={d} value={d}>
                             {d}
                           </option>
                         ))}
+                      </select>
+                    </div>
+
+                    <div
+                      className="space-y-1.5 relative cursor-pointer"
+                      onClickCapture={(e) => {
+                        if (!district) {
+                          e.stopPropagation();
+                          toast.error("Please select a district first");
+                        }
+                      }}
+                    >
+                      <Label className="text-xs font-bold text-slate-700">City / Village / Taluka</Label>
+                      <select
+                        value={village}
+                        disabled={!district}
+                        onChange={(e) => setVillage(e.target.value)}
+                        className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        <option value="">{district ? "Select City / Village / Taluka" : "Please select district first"}</option>
+                        {district && getCitiesForDistrict(district).map((city) => (
+                          <option key={city} value={city}>
+                            {city}
+                          </option>
+                        ))}
+                        {village && district && !getCitiesForDistrict(district).includes(village) && (
+                          <option value={village}>{village}</option>
+                        )}
                       </select>
                     </div>
 

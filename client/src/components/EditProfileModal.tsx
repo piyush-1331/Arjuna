@@ -67,9 +67,9 @@ export function EditProfileModal({
   const [phone, setPhone] = useState(user?.phone || "");
   const [dateOfBirth, setDateOfBirth] = useState(user?.dateOfBirth || "");
   const [age, setAge] = useState<number | string>(user?.age ?? "");
-  const [gender, setGender] = useState(user?.gender || "female");
+  const [gender, setGender] = useState(user?.gender || "");
   const [village, setVillage] = useState(user?.village || "");
-  const [district, setDistrict] = useState(user?.district || "Ahmedabad Rural");
+  const [district, setDistrict] = useState(user?.district || "");
   const [address, setAddress] = useState(user?.address || "");
   const [pincode, setPincode] = useState(user?.pincode || "");
   const [emergencyContactName, setEmergencyContactName] = useState(user?.emergencyContactName || "");
@@ -88,9 +88,9 @@ export function EditProfileModal({
       setPhone(user.phone || "");
       setDateOfBirth(user.dateOfBirth || "");
       setAge(user.age ?? "");
-      setGender(user.gender || "female");
+      setGender(user.gender || "");
       setVillage(user.village || "");
-      setDistrict(user.district || "Ahmedabad Rural");
+      setDistrict(user.district || "");
       setAddress(user.address || "");
       setPincode(user.pincode || "");
       setEmergencyContactName(user.emergencyContactName || "");
@@ -294,6 +294,7 @@ export function EditProfileModal({
                   onChange={(e) => setGender(e.target.value)}
                   className="h-10 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 text-xs font-medium text-slate-900 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-900"
                 >
+                  <option value="">Select Gender</option>
                   <option value="female">Female</option>
                   <option value="male">Male</option>
                   <option value="other">Other</option>
@@ -367,33 +368,49 @@ export function EditProfileModal({
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div className="space-y-1">
-                <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">City / Village / Taluka</Label>
-                <Input
-                  list="modal-edit-profile-cities"
-                  value={village}
-                  onChange={(e) => setVillage(e.target.value)}
-                  placeholder="e.g. Pune City, Karanji Budruk, Shahada"
-                  className="rounded-xl border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs h-10 focus:bg-white dark:focus:bg-slate-900"
-                />
-                <datalist id="modal-edit-profile-cities">
-                  {getCitiesForDistrict(district).map((city) => (
-                    <option key={city} value={city} />
-                  ))}
-                </datalist>
-              </div>
-
-              <div className="space-y-1">
                 <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">District (Maharashtra)</Label>
                 <select
                   value={district}
-                  onChange={(e) => setDistrict(e.target.value)}
+                  onChange={(e) => {
+                    setDistrict(e.target.value);
+                    setVillage("");
+                  }}
                   className="h-10 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 text-xs font-medium text-slate-900 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-900"
                 >
+                  <option value="">Select District</option>
                   {MAHARASHTRA_DISTRICTS.map((d) => (
                     <option key={d} value={d}>
                       {d}
                     </option>
                   ))}
+                </select>
+              </div>
+
+              <div
+                className="space-y-1 relative cursor-pointer"
+                onClickCapture={(e) => {
+                  if (!district) {
+                    e.stopPropagation();
+                    toast.error("Please select a district first");
+                  }
+                }}
+              >
+                <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">City / Village / Taluka</Label>
+                <select
+                  value={village}
+                  disabled={!district}
+                  onChange={(e) => setVillage(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 text-xs font-medium text-slate-900 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-900 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <option value="">{district ? "Select City / Village / Taluka" : "Please select district first"}</option>
+                  {district && getCitiesForDistrict(district).map((city) => (
+                    <option key={city} value={city}>
+                      {city}
+                    </option>
+                  ))}
+                  {village && district && !getCitiesForDistrict(district).includes(village) && (
+                    <option value={village}>{village}</option>
+                  )}
                 </select>
               </div>
 
