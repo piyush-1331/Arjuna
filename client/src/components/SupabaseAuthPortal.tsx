@@ -29,6 +29,7 @@ import {
   validateSupabaseCredentials,
 } from "@shared/supabaseAuthFlow";
 import { getPasswordStrengthLabel, validatePasswordStrength } from "@shared/passwordPolicy";
+import { MAHARASHTRA_DISTRICTS, getCitiesForDistrict } from "@shared/maharashtraLocations";
 import { useLocation } from "wouter";
 
 type AuthTab = "login" | "citizen" | "staff";
@@ -51,7 +52,7 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
-  const [district, setDistrict] = useState("Ahmedabad Rural");
+  const [district, setDistrict] = useState("Nandurbar");
   const [village, setVillage] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [gender, setGender] = useState("female");
@@ -450,25 +451,32 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700">Village</Label>
+                    <Label className="text-xs font-bold text-slate-700">City / Village / Taluka</Label>
                     <Input
-                      placeholder="Karanji Budruk"
+                      list="citizen-registration-cities"
+                      placeholder="e.g. Pune City, Karanji, Shahada"
                       value={village}
                       onChange={(e) => setVillage(e.target.value)}
                       className="rounded-2xl bg-slate-50 border-slate-200 h-10 text-xs"
                     />
+                    <datalist id="citizen-registration-cities">
+                      {getCitiesForDistrict(district).map((city) => (
+                        <option key={city} value={city} />
+                      ))}
+                    </datalist>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700">District *</Label>
+                    <Label className="text-xs font-bold text-slate-700">District (Maharashtra) *</Label>
                     <select
                       value={district}
                       onChange={(e) => setDistrict(e.target.value)}
-                      className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium"
+                      className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium focus:bg-white"
                     >
-                      <option value="Ahmedabad Rural">Ahmedabad Rural</option>
-                      <option value="Nandurbar">Nandurbar</option>
-                      <option value="Nashik">Nashik</option>
-                      <option value="Pune">Pune</option>
+                      {MAHARASHTRA_DISTRICTS.map((dist) => (
+                        <option key={dist} value={dist}>
+                          {dist}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -740,16 +748,17 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
                 )}
 
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-slate-700">District *</Label>
+                  <Label className="text-xs font-bold text-slate-700">District (Maharashtra) *</Label>
                   <select
                     value={district}
                     onChange={(e) => setDistrict(e.target.value)}
-                    className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium"
+                    className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium focus:bg-white"
                   >
-                    <option value="Ahmedabad Rural">Ahmedabad Rural</option>
-                    <option value="Nandurbar">Nandurbar</option>
-                    <option value="Nashik">Nashik</option>
-                    <option value="Pune">Pune</option>
+                    {MAHARASHTRA_DISTRICTS.map((dist) => (
+                      <option key={dist} value={dist}>
+                        {dist}
+                      </option>
+                    ))}
                   </select>
                 </div>
 

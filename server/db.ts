@@ -1453,31 +1453,45 @@ export async function getPatientTimeline(patientId: number) {
 
 export async function getFacilities(district?: string) {
   initMemoryStore();
-  if (supabaseDb.isSupabaseDataConfigured()) return supabaseDb.getFacilities(district);
-  const db = await getDb();
-  if (db) {
+  let list: any[] = [];
+  if (supabaseDb.isSupabaseDataConfigured()) {
     try {
-      const rows = district
-        ? await db.select().from(facilities).where(eq(facilities.district, district)).orderBy(facilities.name)
-        : await db.select().from(facilities).orderBy(facilities.name);
-      if (rows.length) {
-        return rows.map((r) => {
-          const meta = SMART_FACILITIES_REGISTRY.find((m) => m.id === r.id || m.name.toLowerCase() === r.name.toLowerCase());
-          return {
-            ...r,
-            latitude: r.latitude ? Number(r.latitude) : meta?.latitude,
-            longitude: r.longitude ? Number(r.longitude) : meta?.longitude,
-            specialties: meta?.specialties || (r as any).specialties || [],
-            emergencyCapability: meta?.emergencyCapability || (r as any).emergencyCapability,
-            doctorAvailability: meta?.doctorAvailability || (r as any).doctorAvailability || [],
-            appointmentAvailability: meta?.appointmentAvailability || (r as any).appointmentAvailability,
-            telemetry: meta?.telemetry,
-          };
-        });
-      }
+      list = await supabaseDb.getFacilities(district);
     } catch { /* fallback */ }
   }
-  return district ? memFacilities.filter(f => f.district === district) : [...memFacilities];
+  if (!list || list.length === 0) {
+    const db = await getDb();
+    if (db) {
+      try {
+        const rows = district
+          ? await db.select().from(facilities).where(eq(facilities.district, district)).orderBy(facilities.name)
+          : await db.select().from(facilities).orderBy(facilities.name);
+        if (rows && rows.length) list = rows;
+      } catch { /* fallback */ }
+    }
+  }
+  if (!list || list.length === 0) {
+    list = district
+      ? memFacilities.filter(f => f.district?.toLowerCase() === district.toLowerCase() || (f.district && district.toLowerCase().includes(f.district.toLowerCase())))
+      : [...memFacilities];
+    // If district filter produced no rows, fallback to all available facilities
+    if (list.length === 0) {
+      list = [...memFacilities];
+    }
+  }
+  return list.map((r) => {
+    const meta = SMART_FACILITIES_REGISTRY.find((m) => m.id === r.id || m.name.toLowerCase() === r.name.toLowerCase());
+    return {
+      ...r,
+      latitude: r.latitude ? Number(r.latitude) : meta?.latitude,
+      longitude: r.longitude ? Number(r.longitude) : meta?.longitude,
+      specialties: meta?.specialties || (r as any).specialties || [],
+      emergencyCapability: meta?.emergencyCapability || (r as any).emergencyCapability,
+      doctorAvailability: meta?.doctorAvailability || (r as any).doctorAvailability || [],
+      appointmentAvailability: meta?.appointmentAvailability || (r as any).appointmentAvailability,
+      telemetry: meta?.telemetry,
+    };
+  });
 }
 
 export function computeMedicineStatus(med: {

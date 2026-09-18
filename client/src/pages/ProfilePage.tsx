@@ -38,6 +38,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { MAHARASHTRA_DISTRICTS, getCitiesForDistrict } from "@shared/maharashtraLocations";
 import { useLocation } from "wouter";
 
 const roleDisplayNames: Record<string, string> = {
@@ -581,28 +582,33 @@ export default function ProfilePage() {
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-bold text-slate-700">Village / Town</Label>
+                      <Label className="text-xs font-bold text-slate-700">City / Village / Taluka</Label>
                       <Input
+                        list="profile-page-cities"
                         value={village}
                         onChange={(e) => setVillage(e.target.value)}
-                        placeholder="e.g. Karanji Budruk"
+                        placeholder="e.g. Pune City, Karanji Budruk, Shahada"
                         className="rounded-2xl border-slate-200 bg-slate-50 h-11 text-sm focus:bg-white"
                       />
+                      <datalist id="profile-page-cities">
+                        {getCitiesForDistrict(district).map((city) => (
+                          <option key={city} value={city} />
+                        ))}
+                      </datalist>
                     </div>
 
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-bold text-slate-700">District</Label>
+                      <Label className="text-xs font-bold text-slate-700">District (Maharashtra)</Label>
                       <select
                         value={district}
                         onChange={(e) => setDistrict(e.target.value)}
                         className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium focus:bg-white"
                       >
-                        <option value="Ahmedabad Rural">Ahmedabad Rural</option>
-                        <option value="Nandurbar">Nandurbar</option>
-                        <option value="Nashik">Nashik</option>
-                        <option value="Pune">Pune</option>
-                        <option value="Gadchiroli">Gadchiroli</option>
-                        <option value="Amravati">Amravati</option>
+                        {MAHARASHTRA_DISTRICTS.map((d) => (
+                          <option key={d} value={d}>
+                            {d}
+                          </option>
+                        ))}
                       </select>
                     </div>
 

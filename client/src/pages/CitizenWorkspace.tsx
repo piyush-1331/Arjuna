@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import WorkspaceLayout, { NavItem } from "@/components/WorkspaceLayout";
 import { trpc } from "@/lib/trpc";
@@ -47,7 +47,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import HealthcareFacilityMap from "@/components/HealthcareFacilityMap";
+import HealthcareFacilityMap, { DEFAULT_FACILITIES } from "@/components/HealthcareFacilityMap";
 import EditProfileModal from "@/components/EditProfileModal";
 import SupabaseAuthPortal from "@/components/SupabaseAuthPortal";
 
@@ -129,6 +129,12 @@ export default function CitizenWorkspace() {
     { patientId: currentPatient?.id || 0 },
     { enabled: Boolean(isAuthenticated && currentPatient?.id) }
   );
+
+  // Reliable facilities dataset for consultation booking and nearby care
+  const facilitiesList = useMemo(() => {
+    if (facilities.data && facilities.data.length > 0) return facilities.data;
+    return DEFAULT_FACILITIES;
+  }, [facilities.data]);
 
   // Mutations
   const createAppointment = trpc.appointments.create.useMutation({
@@ -1796,14 +1802,16 @@ export default function CitizenWorkspace() {
             </CardHeader>
             <CardContent className="space-y-3 pt-4 text-xs">
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300">Health Facility</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300">Health Facility *</label>
                 <select
-                  value={appointmentForm.facilityId}
+                  value={appointmentForm.facilityId || facilitiesList[0]?.id || 1}
                   onChange={(e) => setAppointmentForm({ ...appointmentForm, facilityId: Number(e.target.value) })}
-                  className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 text-xs bg-[#f9fafb] dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                  className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 text-xs bg-[#f9fafb] dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-medium focus:bg-white dark:focus:bg-slate-900"
                 >
-                  {(facilities.data || []).map((f) => (
-                    <option key={f.id} value={f.id}>{f.name} ({f.facilityType})</option>
+                  {facilitiesList.map((f: any) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name} ({f.facilityType ? String(f.facilityType).toUpperCase().replace("_", " ") : "PHC"} · {f.district || "Maharashtra"})
+                    </option>
                   ))}
                 </select>
               </div>
@@ -1846,8 +1854,8 @@ export default function CitizenWorkspace() {
                     return;
                   }
                   createAppointment.mutate({
-                    patientId: currentPatient?.id || 1,
-                    facilityId: appointmentForm.facilityId,
+                    patientId: currentPatient?.id || (user?.id ? Number(user.id) : 1),
+                    facilityId: appointmentForm.facilityId || facilitiesList[0]?.id || 1,
                     scheduledAt: new Date(appointmentForm.scheduledAt),
                     type: appointmentForm.type,
                     notes: appointmentForm.notes,

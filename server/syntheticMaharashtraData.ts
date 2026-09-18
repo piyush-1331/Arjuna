@@ -504,9 +504,5 @@ export const SYNTHETIC_DEMO_ACCOUNTS = [
 
 export const DEMO_USERS = SYNTHETIC_DEMO_ACCOUNTS;
 export const MAHARASHTRA_VILLAGES = MAHARASHTRA_VILLAGES_LIST;
-export const MAHARASHTRA_DISTRICTS = [
-  "Nandurbar", "Dhule", "Nashik", "Jalgaon", "Ahmednagar",
-  "Pune", "Satara", "Solapur", "Beed", "Latur",
-  "Osmanabad", "Gadchiroli", "Chandrapur", "Yavatmal", "Amravati"
-];
+export { MAHARASHTRA_DISTRICTS } from "../shared/maharashtraLocations";
 export const SYNTHETIC_DATA_DISCLAIMER = DEMO_DATA_DISCLAIMER;
