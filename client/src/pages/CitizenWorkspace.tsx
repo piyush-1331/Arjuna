@@ -37,8 +37,10 @@ import {
   Sparkles,
   Sun,
   Sunrise,
+  RefreshCw,
   Sunset,
   User,
+  UserCog,
   Users,
   Volume2,
   Stethoscope,
@@ -46,13 +48,16 @@ import {
   Zap,
 } from "lucide-react";
 import HealthcareFacilityMap from "@/components/HealthcareFacilityMap";
+import EditProfileModal from "@/components/EditProfileModal";
+import SupabaseAuthPortal from "@/components/SupabaseAuthPortal";
 
 export default function CitizenWorkspace() {
-  const { user } = useAuth();
+  const { user, isAuthenticated, loading } = useAuth();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [prescriptionTab, setPrescriptionTab] = useState<"summary" | "active" | "history">("summary");
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [showMedicineFinderModal, setShowMedicineFinderModal] = useState(false);
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [medicineSearchQuery, setMedicineSearchQuery] = useState("Paracetamol");
   const [citizenFollowUpFilter, setCitizenFollowUpFilter] = useState<"all" | "upcoming" | "completed">("all");
 
@@ -89,17 +94,41 @@ export default function CitizenWorkspace() {
 
   // Queries
   const utils = trpc.useUtils();
-  const overview = trpc.dashboard.overview.useQuery();
-  const patients = trpc.patients.list.useQuery();
-  const visits = trpc.patients.timeline.useQuery({ id: 1 });
-  const prescriptions = trpc.prescriptions.list.useQuery();
-  const prescriptionSummary = trpc.prescriptions.getSummary.useQuery({ patientId: 1 });
-  const appointments = trpc.appointments.list.useQuery();
-  const referrals = trpc.referrals.citizenList.useQuery();
-  const followUps = trpc.followUps.citizenUpcoming.useQuery();
-  const facilities = trpc.facilities.list.useQuery();
-  const alerts = trpc.alerts.list.useQuery();
-  const patientRiskQuery = trpc.risk.getPatientRiskProfile.useQuery({ patientId: 1 });
+  const overview = trpc.dashboard.overview.useQuery(undefined, { enabled: isAuthenticated });
+  const patients = trpc.patients.list.useQuery(undefined, { enabled: isAuthenticated });
+
+  // Current primary citizen patient or logged in citizen
+  const currentPatient =
+    patients.data?.find(
+      (p) =>
+        (user?.id && p.userId === user.id) ||
+        (user?.name && p.name.toLowerCase() === user.name.toLowerCase())
+    ) || (user?.role === "citizen" ? patients.data?.[0] : patients.data?.[0]);
+
+  const visits = trpc.patients.timeline.useQuery(
+    { id: currentPatient?.id || 0 },
+    { enabled: Boolean(isAuthenticated && currentPatient?.id) }
+  );
+  const prescriptions = trpc.prescriptions.list.useQuery(
+    currentPatient?.id ? { patientId: currentPatient.id } : undefined,
+    { enabled: Boolean(isAuthenticated && currentPatient?.id) }
+  );
+  const prescriptionSummary = trpc.prescriptions.getSummary.useQuery(
+    { patientId: currentPatient?.id || 0 },
+    { enabled: Boolean(isAuthenticated && currentPatient?.id) }
+  );
+  const appointments = trpc.appointments.list.useQuery(
+    currentPatient?.id ? { patientId: currentPatient.id } : undefined,
+    { enabled: Boolean(isAuthenticated && currentPatient?.id) }
+  );
+  const referrals = trpc.referrals.citizenList.useQuery(undefined, { enabled: isAuthenticated });
+  const followUps = trpc.followUps.citizenUpcoming.useQuery(undefined, { enabled: isAuthenticated });
+  const facilities = trpc.facilities.list.useQuery(undefined, { enabled: isAuthenticated });
+  const alerts = trpc.alerts.list.useQuery(undefined, { enabled: isAuthenticated });
+  const patientRiskQuery = trpc.risk.getPatientRiskProfile.useQuery(
+    { patientId: currentPatient?.id || 0 },
+    { enabled: Boolean(isAuthenticated && currentPatient?.id) }
+  );
 
   // Mutations
   const createAppointment = trpc.appointments.create.useMutation({
@@ -144,20 +173,16 @@ export default function CitizenWorkspace() {
     onError: (err) => toast.error(err.message),
   });
 
-  // Current primary citizen patient or logged in citizen
-  const currentPatient =
-    patients.data?.find(
-      (p) =>
-        (user?.name && p.name.toLowerCase() === user.name.toLowerCase()) ||
-        (user?.id && p.userId === user.id) ||
-        p.id === 1
-    ) || patients.data?.[0];
-
   const displayName = user?.name || currentPatient?.name || "Citizen";
-  const displayAge = user?.age || currentPatient?.age || 38;
-  const displayVillage = user?.village || currentPatient?.village || "Sundarpur";
-  const displayAbhaId = `91-8201-${String(user?.id || currentPatient?.id || 9921).padStart(4, "0")}`;
-  const displayEmergencyContact = user?.emergencyContactPhone || user?.phone || currentPatient?.emergencyContact || "+91 98 2211 4401";
+  const displayAge = user?.age || currentPatient?.age;
+  const displayGender = user?.gender || currentPatient?.gender || "Not specified";
+  const displayVillage = user?.village || currentPatient?.village || "Not specified";
+  const displayDistrict = user?.district || currentPatient?.district || "Ahmedabad Rural";
+  const displayAbhaId = user?.abhaId || currentPatient?.abhaId || (user?.id ? `91-8201-${String(user.id).padStart(4, "0")}` : "91-8201-9921");
+  const displayEmergencyContact = user?.emergencyContactPhone || user?.phone || currentPatient?.emergencyContact || user?.emergencyContactName || "Not Provided";
+  const displayBloodGroup = user?.bloodGroup || currentPatient?.bloodGroup || "Not Provided";
+  const displayAllergies = user?.allergies || currentPatient?.allergies || "None declared";
+  const displayConditions = user?.conditions || currentPatient?.conditions || "None declared";
 
   const familyMembers = patients.data || [];
   const activePrescriptions = (prescriptions.data || []).filter((p) => p.status === "active");
@@ -165,6 +190,14 @@ export default function CitizenWorkspace() {
   const citizenReferrals = referrals.data || [];
   const citizenFollowUps = followUps.data || [];
   const upcomingFollowUpsCount = citizenFollowUps.filter((f) => f.isUpcoming).length;
+
+  const latestVisit = visits.data?.visits?.[0];
+  const latestBp = latestVisit?.bpSystolic && latestVisit?.bpDiastolic ? `${latestVisit.bpSystolic}/${latestVisit.bpDiastolic}` : null;
+  const latestGlucose = latestVisit?.glucose ? `${latestVisit.glucose}` : null;
+  const latestSpo2 = latestVisit?.spo2 ? `${latestVisit.spo2}%` : null;
+  const latestPulse = latestVisit?.pulse ? `${latestVisit.pulse} bpm` : null;
+  const latestBmi = latestVisit?.bmi ? `${latestVisit.bmi}` : null;
+  const latestWeight = latestVisit?.weight ? `${latestVisit.weight} kg` : null;
 
   const citizenFacilitySearch = trpc.medicineAvailability.searchFacilities.useQuery(
     {
@@ -188,9 +221,9 @@ export default function CitizenWorkspace() {
       message: msg,
       language,
       patientContext: {
-        age: Number(displayAge),
-        conditions: currentPatient?.conditions || undefined,
-        recentVitals: "BP: 158/96, Glucose: 164",
+        age: displayAge ? Number(displayAge) : undefined,
+        conditions: displayConditions !== "None declared" ? displayConditions : undefined,
+        recentVitals: latestBp ? `BP: ${latestBp}${latestGlucose ? `, Glucose: ${latestGlucose}` : ""}` : undefined,
       },
     });
   };
@@ -238,7 +271,7 @@ export default function CitizenWorkspace() {
           ? "Arjuna Health Assistant"
           : "Personal Alerts & Notifications"
       }
-      subtitle={`Patient: ${displayName} · ${displayAge} yrs · ${displayVillage} (ABHA ID: ${displayAbhaId})`}
+      subtitle={`Patient: ${displayName}${displayAge ? ` · ${displayAge} yrs` : ""} · ${displayVillage} (ABHA ID: ${displayAbhaId})`}
       actions={
         activeTab === "appointments" ? (
           <Button onClick={() => setShowBookAppt(true)} className="rounded-full bg-[#15181b] text-white">
@@ -272,7 +305,7 @@ export default function CitizenWorkspace() {
                   </p>
                   <div className="mt-4 flex flex-wrap items-center gap-3 text-xs font-semibold text-slate-700">
                     <span className="rounded-xl bg-white px-3 py-1.5 shadow-xs border border-black/5">
-                      Blood Group: <strong>{currentPatient?.bloodGroup || "B+"}</strong>
+                      Blood Group: <strong>{displayBloodGroup}</strong>
                     </span>
                     <span className="rounded-xl bg-white px-3 py-1.5 shadow-xs border border-black/5">
                       Assigned Centre: <strong>{user?.facilityName || "Sundarpur PHC"}</strong>
@@ -294,6 +327,19 @@ export default function CitizenWorkspace() {
                   <Button onClick={() => setActiveTab("my_health")} className="rounded-full bg-[#15181b] text-white text-xs font-semibold">
                     View Health Record
                   </Button>
+                  <Button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setShowEditProfileModal(true);
+                    }}
+                    variant="outline"
+                    className="rounded-full justify-between bg-white text-xs font-semibold cursor-pointer"
+                  >
+                    <span>Edit My Profile</span>
+                    <UserCog className="h-3.5 w-3.5 text-slate-400" />
+                  </Button>
                 </div>
               </div>
             </CardContent>
@@ -308,12 +354,18 @@ export default function CitizenWorkspace() {
                   <Activity className="h-4 w-4 text-rose-500" />
                 </div>
                 <div className="mt-4 flex items-baseline gap-2">
-                  <p className="display-font text-3xl font-extrabold text-slate-900">158/96</p>
-                  <span className="text-xs text-slate-500">mmHg</span>
+                  <p className="display-font text-3xl font-extrabold text-slate-900">{latestBp || "—"}</p>
+                  {latestBp && <span className="text-xs text-slate-500">mmHg</span>}
                 </div>
-                <div className="mt-2 flex items-center gap-1.5 text-xs text-amber-700">
-                  <span className="h-2 w-2 rounded-full bg-amber-500" />
-                  <span>Stage 1 Hypertension (Under care)</span>
+                <div className="mt-2 flex items-center gap-1.5 text-xs text-slate-600">
+                  {latestBp ? (
+                    <>
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      <span>Last recorded reading</span>
+                    </>
+                  ) : (
+                    <span className="text-slate-400">No readings recorded yet</span>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -325,10 +377,10 @@ export default function CitizenWorkspace() {
                   <HeartPulse className="h-4 w-4 text-blue-500" />
                 </div>
                 <div className="mt-4 flex items-baseline gap-2">
-                  <p className="display-font text-3xl font-extrabold text-slate-900">164</p>
-                  <span className="text-xs text-slate-500">mg/dL</span>
+                  <p className="display-font text-3xl font-extrabold text-slate-900">{latestGlucose || "—"}</p>
+                  {latestGlucose && <span className="text-xs text-slate-500">mg/dL</span>}
                 </div>
-                <p className="mt-2 text-xs text-slate-500">Target fasting: &lt; 130 mg/dL</p>
+                <p className="mt-2 text-xs text-slate-400">{latestGlucose ? "Recorded at screening" : "No glucose test recorded"}</p>
               </CardContent>
             </Card>
 
@@ -339,10 +391,10 @@ export default function CitizenWorkspace() {
                   <Activity className="h-4 w-4 text-emerald-500" />
                 </div>
                 <div className="mt-4 flex items-baseline gap-2">
-                  <p className="display-font text-3xl font-extrabold text-slate-900">97%</p>
-                  <span className="text-xs text-slate-500">Normal</span>
+                  <p className="display-font text-3xl font-extrabold text-slate-900">{latestSpo2 || "—"}</p>
+                  {latestSpo2 && <span className="text-xs text-slate-500">Normal</span>}
                 </div>
-                <p className="mt-2 text-xs text-emerald-600 font-semibold">Pulse: 74 bpm</p>
+                <p className="mt-2 text-xs text-slate-400 font-semibold">{latestPulse ? `Pulse: ${latestPulse}` : "No SpO2 recorded"}</p>
               </CardContent>
             </Card>
 
@@ -353,9 +405,13 @@ export default function CitizenWorkspace() {
                   <Clock className="h-4 w-4 text-purple-500" />
                 </div>
                 <div className="mt-4 flex items-baseline gap-2">
-                  <p className="display-font text-3xl font-extrabold text-slate-900">In 2 Days</p>
+                  <p className="display-font text-2xl font-extrabold text-slate-900 truncate">
+                    {citizenFollowUps[0]?.relativeText || "None Pending"}
+                  </p>
                 </div>
-                <p className="mt-2 text-xs text-slate-500 truncate">Home BP monitoring by ASHA</p>
+                <p className="mt-2 text-xs text-slate-500 truncate">
+                  {citizenFollowUps[0]?.title || citizenFollowUps[0]?.reason || "No pending home visits"}
+                </p>
               </CardContent>
             </Card>
           </div>
@@ -527,28 +583,45 @@ export default function CitizenWorkspace() {
         <div className="space-y-6">
           <div className="grid gap-6 lg:grid-cols-3">
             <Card className="border-0 shadow-xs bg-white lg:col-span-1">
-              <CardHeader>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Patient Profile</p>
-                <CardTitle className="display-font text-xl">{currentPatient?.name || "Meena Patel"}</CardTitle>
-                <CardDescription>Age: {currentPatient?.age} yrs · Gender: {currentPatient?.gender}</CardDescription>
+              <CardHeader className="flex flex-row items-start justify-between">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Patient Profile</p>
+                  <CardTitle className="display-font text-xl">{displayName}</CardTitle>
+                  <CardDescription>
+                    {displayAge ? `Age: ${displayAge} yrs` : "Age not set"} · Gender: {displayGender}
+                  </CardDescription>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowEditProfileModal(true);
+                  }}
+                  className="rounded-full text-xs font-semibold cursor-pointer"
+                >
+                  <UserCog className="h-3.5 w-3.5 mr-1" /> Edit Profile
+                </Button>
               </CardHeader>
               <CardContent className="space-y-4 text-xs">
                 <div className="rounded-2xl bg-[#f7f9fa] p-4 space-y-2">
-                  <div className="flex justify-between"><span className="text-slate-500">ABHA Number</span><span className="font-semibold">91-8201-9921-4400</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500">Village</span><span className="font-semibold">{currentPatient?.village || "Sundarpur"}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500">District</span><span className="font-semibold">{currentPatient?.district || "Ahmedabad Rural"}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500">Primary Contact</span><span className="font-semibold">{currentPatient?.contact || "+91 98 2211 4400"}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500">Blood Group</span><Badge variant="outline" className="font-bold">{currentPatient?.bloodGroup || "B+"}</Badge></div>
+                  <div className="flex justify-between"><span className="text-slate-500">ABHA Number</span><span className="font-semibold">{displayAbhaId}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Village</span><span className="font-semibold">{displayVillage}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">District</span><span className="font-semibold">{displayDistrict}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Primary Contact</span><span className="font-semibold">{user?.phone || currentPatient?.contact || "Not provided"}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Blood Group</span><Badge variant="outline" className="font-bold">{displayBloodGroup}</Badge></div>
                 </div>
 
                 <div className="rounded-2xl border border-rose-100 bg-rose-50/60 p-4">
                   <span className="font-bold text-rose-800 text-[11px] uppercase tracking-wider block mb-1">Known Allergies</span>
-                  <p className="text-rose-700">{currentPatient?.allergies || "Sulfa drugs (causes rash)"}</p>
+                  <p className="text-rose-700">{displayAllergies}</p>
                 </div>
 
                 <div className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4">
                   <span className="font-bold text-amber-800 text-[11px] uppercase tracking-wider block mb-1">Diagnosed Conditions</span>
-                  <p className="text-amber-700">{currentPatient?.conditions || "Hypertension, Early Diabetic Nephropathy"}</p>
+                  <p className="text-amber-700">{displayConditions}</p>
                 </div>
               </CardContent>
             </Card>
@@ -562,18 +635,26 @@ export default function CitizenWorkspace() {
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="rounded-2xl bg-[#f7f9fa] p-4">
                     <span className="text-[11px] text-slate-500 font-semibold">Systolic / Diastolic</span>
-                    <p className="mt-1 text-2xl font-extrabold text-slate-900">158/96</p>
-                    <span className="mt-1 block text-[10px] text-amber-600 font-bold">Needs Monitoring</span>
+                    <p className="mt-1 text-2xl font-extrabold text-slate-900">{latestBp || "—"}</p>
+                    <span className="mt-1 block text-[10px] text-slate-500 font-medium">
+                      {latestBp ? "Latest reading" : "No BP recorded"}
+                    </span>
                   </div>
                   <div className="rounded-2xl bg-[#f7f9fa] p-4">
                     <span className="text-[11px] text-slate-500 font-semibold">Blood Glucose</span>
-                    <p className="mt-1 text-2xl font-extrabold text-slate-900">164 mg/dL</p>
-                    <span className="mt-1 block text-[10px] text-slate-500">Post-meal check</span>
+                    <p className="mt-1 text-2xl font-extrabold text-slate-900">{latestGlucose ? `${latestGlucose} mg/dL` : "—"}</p>
+                    <span className="mt-1 block text-[10px] text-slate-500">
+                      {latestGlucose ? "Screening check" : "No glucose recorded"}
+                    </span>
                   </div>
                   <div className="rounded-2xl bg-[#f7f9fa] p-4">
                     <span className="text-[11px] text-slate-500 font-semibold">BMI / Weight</span>
-                    <p className="mt-1 text-2xl font-extrabold text-slate-900">26.4 / 64.5 kg</p>
-                    <span className="mt-1 block text-[10px] text-slate-500">Overweight range</span>
+                    <p className="mt-1 text-2xl font-extrabold text-slate-900">
+                      {latestBmi || latestWeight ? `${latestBmi || "—"} / ${latestWeight || "—"}` : "—"}
+                    </p>
+                    <span className="mt-1 block text-[10px] text-slate-500">
+                      {latestBmi ? "Calculated parameter" : "No anthropometry recorded"}
+                    </span>
                   </div>
                 </div>
 
@@ -583,7 +664,7 @@ export default function CitizenWorkspace() {
                     <span>AI Care Recommendations</span>
                   </div>
                   <p className="mt-2 text-xs leading-relaxed text-slate-700">
-                    Your morning systolic BP is consistently running over 150 mmHg. Maintain strict salt reduction (&lt; 5g/day), ensure daily evening walks, and do not miss your Telmisartan dosage. If you experience persistent morning headache, request an urgent PHC visit.
+                    {latestVisit?.aiSummary || (currentPatient?.conditions ? `Care plan active for ${currentPatient.conditions}. Maintain healthy diet, ensure regular hydration, and attend scheduled follow-ups with your ASHA worker.` : "Welcome to your personal healthcare workspace. Once clinical visits or screenings are recorded by your ASHA worker or doctor, personalized insights and risk alerts will be shown here.")}
                   </p>
                 </div>
               </CardContent>
@@ -595,33 +676,48 @@ export default function CitizenWorkspace() {
       {/* 3. FAMILY VIEW */}
       {activeTab === "family" && (
         <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {familyMembers.map((member) => (
-              <Card key={member.id} className="border-0 shadow-xs bg-white">
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="grid h-10 w-10 place-items-center rounded-2xl bg-slate-100 text-sm font-bold text-slate-700">
-                        {member.name.split(" ").map((n: string) => n[0]).join("")}
+          {familyMembers.length === 0 ? (
+            <Card className="border-0 shadow-xs bg-white text-center py-12">
+              <CardContent className="space-y-3">
+                <Users className="h-10 w-10 text-slate-300 mx-auto" />
+                <h3 className="font-bold text-slate-800 text-base">No Family Members Registered</h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  Add your family members or dependents to monitor their health records, prescriptions, and appointments together.
+                </p>
+                <Button onClick={() => setShowAddFamily(true)} className="rounded-full bg-[#15181b] text-white text-xs font-semibold mt-2">
+                  <Plus className="mr-1.5 h-4 w-4" /> Add First Family Member
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {familyMembers.map((member) => (
+                <Card key={member.id} className="border-0 shadow-xs bg-white">
+                  <CardContent className="p-5">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="grid h-10 w-10 place-items-center rounded-2xl bg-slate-100 text-sm font-bold text-slate-700">
+                          {member.name.split(" ").map((n: string) => n[0]).join("")}
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-sm text-slate-900">{member.name}</h3>
+                          <p className="text-xs text-slate-500">{member.age} yrs · {member.gender}</p>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="font-bold text-sm text-slate-900">{member.name}</h3>
-                        <p className="text-xs text-slate-500">{member.age} yrs · {member.gender}</p>
-                      </div>
+                      <Badge variant="outline" className={`text-[10px] ${member.riskCategory === "high" || member.riskCategory === "critical" ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>
+                        {member.riskCategory || "low"} risk
+                      </Badge>
                     </div>
-                    <Badge variant="outline" className={`text-[10px] ${member.riskCategory === "high" || member.riskCategory === "critical" ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>
-                      {member.riskCategory} risk
-                    </Badge>
-                  </div>
-                  <div className="mt-4 space-y-1.5 border-t border-slate-100 pt-3 text-xs text-slate-600">
-                    <p><strong>Conditions:</strong> {member.conditions || "None declared"}</p>
-                    <p><strong>Allergies:</strong> {member.allergies || "None"}</p>
-                    <p><strong>Contact:</strong> {member.contact || "Shared household"}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                    <div className="mt-4 space-y-1.5 border-t border-slate-100 pt-3 text-xs text-slate-600">
+                      <p><strong>Conditions:</strong> {member.conditions || "None declared"}</p>
+                      <p><strong>Allergies:</strong> {member.allergies || "None"}</p>
+                      <p><strong>Contact:</strong> {member.contact || "Shared household"}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -670,29 +766,43 @@ export default function CitizenWorkspace() {
       {activeTab === "appointments" && (
         <div className="space-y-4">
           <Card className="border-0 shadow-xs bg-white">
-            <CardHeader>
-              <CardTitle className="display-font text-lg font-bold">Doctor Consultations & Appointments</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="display-font text-lg font-bold">Doctor Consultations & Appointments</CardTitle>
+                <CardDescription>Scheduled consultations at nearby PHC and Sub-Centres</CardDescription>
+              </div>
+              <Button onClick={() => setShowBookAppt(true)} size="sm" className="rounded-full bg-[#15181b] text-white text-xs">
+                <Plus className="mr-1.5 h-3.5 w-3.5" /> Book Consultation
+              </Button>
             </CardHeader>
             <CardContent className="space-y-3">
-              {(appointments.data || []).map((a) => (
-                <div key={a.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-[#f9fafb] p-4 text-xs">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-900 text-sm">{a.facilityName}</span>
-                      <Badge variant="outline" className="text-[10px] uppercase">{a.type.replace("_", " ")}</Badge>
-                    </div>
-                    <p className="mt-1 text-slate-500">
-                      Scheduled: <strong>{new Date(a.scheduledAt).toLocaleString()}</strong>
-                    </p>
-                    {a.notes && <p className="mt-1 text-slate-600">Reason: {a.notes}</p>}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge className={a.status === "scheduled" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}>
-                      {a.status}
-                    </Badge>
-                  </div>
+              {(appointments.data || []).length === 0 ? (
+                <div className="rounded-2xl bg-slate-50 p-8 text-center text-slate-400 space-y-2">
+                  <Calendar className="h-8 w-8 text-slate-300 mx-auto" />
+                  <p className="text-xs font-semibold text-slate-600">No scheduled appointments</p>
+                  <p className="text-xs text-slate-400">Click "Book Consultation" to request a doctor visit or checkup.</p>
                 </div>
-              ))}
+              ) : (
+                (appointments.data || []).map((a) => (
+                  <div key={a.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-[#f9fafb] p-4 text-xs">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900 text-sm">{a.facilityName}</span>
+                        <Badge variant="outline" className="text-[10px] uppercase">{a.type.replace("_", " ")}</Badge>
+                      </div>
+                      <p className="mt-1 text-slate-500">
+                        Scheduled: <strong>{new Date(a.scheduledAt).toLocaleString()}</strong>
+                      </p>
+                      {a.notes && <p className="mt-1 text-slate-600">Reason: {a.notes}</p>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge className={a.status === "scheduled" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}>
+                        {a.status}
+                      </Badge>
+                    </div>
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
         </div>
@@ -1880,19 +1990,19 @@ export default function CitizenWorkspace() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-100 dark:border-slate-700">
                 <div>
                   <span className="text-slate-400 block text-[10px] font-bold uppercase">Patient Name</span>
-                  <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">{currentPatient?.name || "Meena Patel"}</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">{displayName}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px] font-bold uppercase">Age / Gender</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">{currentPatient?.age || 48} yrs / {currentPatient?.gender || "Female"}</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{displayAge ? `${displayAge} yrs` : "—"} / {displayGender}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px] font-bold uppercase">ABHA Number</span>
-                  <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">91-8201-9921</span>
+                  <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">{displayAbhaId}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px] font-bold uppercase">Village / Block</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">{currentPatient?.village || "Sundarpur"}, Sanand</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{displayVillage}, {displayDistrict}</span>
                 </div>
               </div>
 
@@ -2141,6 +2251,12 @@ export default function CitizenWorkspace() {
           </Card>
         </div>
       )}
+
+      {/* Edit Profile Modal */}
+      <EditProfileModal
+        open={showEditProfileModal}
+        onOpenChange={setShowEditProfileModal}
+      />
     </WorkspaceLayout>
   );
 }

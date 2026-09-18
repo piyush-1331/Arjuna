@@ -58,27 +58,27 @@ import {
 } from "lucide-react";
 
 export default function AdministratorWorkspace() {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState("command_center");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedVillageFilter, setSelectedVillageFilter] = useState("all");
 
   // Queries
   const utils = trpc.useUtils();
-  const overview = trpc.dashboard.overview.useQuery();
-  const patients = trpc.patients.list.useQuery({ limit: 100 });
-  const riskDist = trpc.analytics.riskDistribution.useQuery();
-  const referralAnalytics = trpc.analytics.referrals.useQuery();
-  const medicineAnalytics = trpc.analytics.medicines.useQuery();
-  const villageMap = trpc.analytics.villageMap.useQuery();
-  const aiInsights = trpc.analytics.aiInsights.useQuery();
-  const campaigns = trpc.campaigns.list.useQuery();
-  const followUps = trpc.followUps.list.useQuery();
-  const notifsQuery = trpc.notifications.list.useQuery(undefined, { staleTime: 10000 });
-  const usersQuery = trpc.admin.listUsers.useQuery(undefined, { staleTime: 15000 });
+  const overview = trpc.dashboard.overview.useQuery(undefined, { enabled: isAuthenticated });
+  const patients = trpc.patients.list.useQuery({ limit: 100 }, { enabled: isAuthenticated });
+  const riskDist = trpc.analytics.riskDistribution.useQuery(undefined, { enabled: isAuthenticated });
+  const referralAnalytics = trpc.analytics.referrals.useQuery(undefined, { enabled: isAuthenticated });
+  const medicineAnalytics = trpc.analytics.medicines.useQuery(undefined, { enabled: isAuthenticated });
+  const villageMap = trpc.analytics.villageMap.useQuery(undefined, { enabled: isAuthenticated });
+  const aiInsights = trpc.analytics.aiInsights.useQuery(undefined, { enabled: isAuthenticated });
+  const campaigns = trpc.campaigns.list.useQuery(undefined, { enabled: isAuthenticated });
+  const followUps = trpc.followUps.list.useQuery(undefined, { enabled: isAuthenticated });
+  const notifsQuery = trpc.notifications.list.useQuery(undefined, { enabled: isAuthenticated, staleTime: 10000 });
+  const usersQuery = trpc.admin.listUsers.useQuery(undefined, { enabled: isAuthenticated, staleTime: 15000 });
   const districtForecastQuery = trpc.demandForecasting.getDistrictForecasts.useQuery(
     { district: "Ahmedabad Rural" },
-    { staleTime: 30000 }
+    { enabled: isAuthenticated, staleTime: 30000 }
   );
   const [selectedForecastFacilityId, setSelectedForecastFacilityId] = useState<number | "all">("all");
 

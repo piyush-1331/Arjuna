@@ -15,6 +15,27 @@ if (supabase) {
   supabase.auth.onAuthStateChange((_event, session) => { currentAccessToken = session?.access_token ?? null; });
 }
 
-export function getSupabaseAccessToken() {
-  return currentAccessToken;
+export function getSupabaseAccessToken(): string | null {
+  if (currentAccessToken) return currentAccessToken;
+  if (typeof window !== "undefined") {
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && ((k.startsWith("sb-") && k.endsWith("-auth-token")) || k.includes("supabase.auth.token"))) {
+          const raw = localStorage.getItem(k);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            const token = parsed?.access_token || parsed?.currentSession?.access_token;
+            if (typeof token === "string" && token.length > 0) {
+              currentAccessToken = token;
+              return token;
+            }
+          }
+        }
+      }
+    } catch {
+      // Ignore JSON parse errors
+    }
+  }
+  return null;
 }

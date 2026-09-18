@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { supabase } from "@/lib/supabase";
 import SupabaseAuthPortal from "@/components/SupabaseAuthPortal";
 import ProfileDropdownMenu from "@/components/ProfileDropdownMenu";
 import { Button } from "@/components/ui/button";
@@ -52,20 +53,27 @@ const roleDisplayNames: Record<string, string> = {
 
 export default function ProfilePage() {
   const { user, isAuthenticated, loading: authLoading, refresh } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const utils = trpc.useUtils();
 
   // Load latest profile data directly from profile endpoint
   const profileQuery = trpc.profile.get.useQuery(undefined, {
-    enabled: isAuthenticated,
+    enabled: Boolean(isAuthenticated || user),
+    retry: false,
     refetchOnWindowFocus: false,
   });
 
   const currentUser = profileQuery.data || user;
 
   // Check URL query param for edit mode (e.g., /profile?edit=true)
-  const isInitialEdit = typeof window !== "undefined" && window.location.search.includes("edit=true");
+  const isInitialEdit = typeof window !== "undefined" && (window.location.search.includes("edit=true") || window.location.href.includes("edit=true"));
   const [isEditing, setIsEditing] = useState(isInitialEdit);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && (window.location.search.includes("edit=true") || window.location.href.includes("edit=true"))) {
+      setIsEditing(true);
+    }
+  }, [location]);
 
   // Form fields for editable data
   const [name, setName] = useState(currentUser?.name || "");
@@ -85,7 +93,7 @@ export default function ProfilePage() {
   const [abhaId, setAbhaId] = useState(currentUser?.abhaId || "");
 
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && !isEditing) {
       setName(currentUser.name || "");
       setPhone(currentUser.phone || "");
       setDateOfBirth(currentUser.dateOfBirth || "");
@@ -102,7 +110,7 @@ export default function ProfilePage() {
       setConditions(currentUser.conditions || "");
       setAbhaId(currentUser.abhaId || "");
     }
-  }, [currentUser]);
+  }, [currentUser, isEditing]);
 
   // Automatically calculate age when Date of Birth is updated
   const handleDobChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -118,25 +126,7 @@ export default function ProfilePage() {
     }
   };
 
-  const updateProfileMutation = trpc.profile.update.useMutation({
-    onSuccess: async () => {
-      toast.success("Profile details saved and updated successfully.");
-      setIsEditing(false);
-      // Invalidate and refetch queries immediately
-      await Promise.all([
-        utils.auth.me.invalidate(),
-        utils.profile.get.invalidate(),
-        utils.alerts.list.invalidate(),
-        utils.notifications.list.invalidate(),
-        utils.notifications.getHistory.invalidate(),
-      ]);
-      await profileQuery.refetch();
-      refresh();
-    },
-    onError: (err) => {
-      toast.error(err.message || "Failed to update profile.");
-    },
-  });
+  const updateProfileMutation = trpc.profile.update.useMutation();
 
   if (authLoading) {
     return (
@@ -149,15 +139,15 @@ export default function ProfilePage() {
     );
   }
 
-  if (!isAuthenticated || !currentUser) {
+  if (!isAuthenticated && !user && !currentUser) {
     return <SupabaseAuthPortal />;
   }
 
   const status = (currentUser.status || "APPROVED").toUpperCase();
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateProfileMutation.mutate({
+    const payload = {
       name: name.trim() || undefined,
       phone: phone.trim() || undefined,
       dateOfBirth: dateOfBirth || undefined,
@@ -173,7 +163,78 @@ export default function ProfilePage() {
       allergies: allergies.trim() || undefined,
       conditions: conditions.trim() || undefined,
       abhaId: abhaId.trim() || undefined,
-    });
+    };
+
+    try {
+      if (supabase) {
+        try {
+          await supabase.auth.updateUser({
+            data: {
+              full_name: payload.name,
+              name: payload.name,
+              phone: payload.phone,
+              date_of_birth: payload.dateOfBirth,
+              age: payload.age,
+              gender: payload.gender,
+              village: payload.village,
+              district: payload.district,
+              address: payload.address,
+              pincode: payload.pincode,
+              emergency_contact_name: payload.emergencyContactName,
+              emergency_contact_phone: payload.emergencyContactPhone,
+              blood_group: payload.bloodGroup,
+              allergies: payload.allergies,
+              conditions: payload.conditions,
+              abha_id: payload.abhaId,
+            },
+          });
+        } catch (sbErr) {
+          console.warn("[Supabase] Client user_metadata update warning:", sbErr);
+        }
+      }
+
+      const res = await updateProfileMutation.mutateAsync(payload);
+
+      if (res?.user) {
+        utils.auth.me.setData(undefined, res.user as any);
+        utils.profile.get.setData(undefined, res.user as any);
+        setName(res.user.name || "");
+        setPhone(res.user.phone || "");
+        setDateOfBirth(res.user.dateOfBirth || "");
+        setAge(res.user.age ?? "");
+        setGender(res.user.gender || "female");
+        setVillage(res.user.village || "");
+        setDistrict(res.user.district || "Ahmedabad Rural");
+        setAddress(res.user.address || "");
+        setPincode(res.user.pincode || "");
+        setEmergencyContactName(res.user.emergencyContactName || "");
+        setEmergencyContactPhone(res.user.emergencyContactPhone || "");
+        setBloodGroup(res.user.bloodGroup || "");
+        setAllergies(res.user.allergies || "");
+        setConditions(res.user.conditions || "");
+        setAbhaId(res.user.abhaId || "");
+      }
+
+      toast.success("Profile details saved and updated successfully.");
+      setIsEditing(false);
+
+      // Invalidate and refetch queries immediately
+      await Promise.all([
+        utils.auth.me.invalidate(),
+        utils.profile.get.invalidate(),
+        utils.patients.list.invalidate(),
+        utils.patients.timeline.invalidate(),
+        utils.patients.getProfile.invalidate(),
+        utils.dashboard.overview.invalidate(),
+        utils.alerts.list.invalidate(),
+        utils.notifications.list.invalidate(),
+        utils.notifications.getHistory.invalidate(),
+      ]);
+      await profileQuery.refetch();
+      refresh();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update profile.");
+    }
   };
 
   const getStatusBadge = () => {
@@ -244,8 +305,14 @@ export default function ProfilePage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <button
-              onClick={() => setLocation("/")}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 mb-1"
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const targetWorkspace = user?.role ? `/dashboard/${user.role === "admin" ? "administrator" : user.role}` : "/";
+                setLocation(targetWorkspace);
+              }}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 mb-1 cursor-pointer"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
               <span>Back to workspace</span>
@@ -261,17 +328,44 @@ export default function ProfilePage() {
           <div className="flex items-center gap-2">
             {!isEditing ? (
               <Button
-                onClick={() => setIsEditing(true)}
-                className="rounded-2xl bg-[#15181b] hover:bg-slate-800 text-white font-bold text-xs gap-1.5 h-10 px-4"
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (currentUser) {
+                    setName(currentUser.name || "");
+                    setPhone(currentUser.phone || "");
+                    setDateOfBirth(currentUser.dateOfBirth || "");
+                    setAge(currentUser.age ?? "");
+                    setGender(currentUser.gender || "female");
+                    setVillage(currentUser.village || "");
+                    setDistrict(currentUser.district || "Ahmedabad Rural");
+                    setAddress(currentUser.address || "");
+                    setPincode(currentUser.pincode || "");
+                    setEmergencyContactName(currentUser.emergencyContactName || "");
+                    setEmergencyContactPhone(currentUser.emergencyContactPhone || "");
+                    setBloodGroup(currentUser.bloodGroup || "");
+                    setAllergies(currentUser.allergies || "");
+                    setConditions(currentUser.conditions || "");
+                    setAbhaId(currentUser.abhaId || "");
+                  }
+                  setIsEditing(true);
+                }}
+                className="rounded-2xl bg-[#15181b] hover:bg-slate-800 text-white font-bold text-xs gap-1.5 h-10 px-4 cursor-pointer shadow-xs"
               >
                 <Edit3 className="h-3.5 w-3.5" />
                 <span>Edit Profile</span>
               </Button>
             ) : (
               <Button
+                type="button"
                 variant="outline"
-                onClick={() => setIsEditing(false)}
-                className="rounded-2xl border-slate-200 text-slate-700 font-bold text-xs gap-1.5 h-10 px-4"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsEditing(false);
+                }}
+                className="rounded-2xl border-slate-200 text-slate-700 font-bold text-xs gap-1.5 h-10 px-4 cursor-pointer"
               >
                 <X className="h-3.5 w-3.5" />
                 <span>Cancel</span>
@@ -279,9 +373,14 @@ export default function ProfilePage() {
             )}
 
             <Button
+              type="button"
               variant="outline"
-              onClick={() => setLocation("/change-password")}
-              className="rounded-2xl border-slate-200 text-slate-700 font-bold text-xs gap-1.5 h-10 px-4"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setLocation("/change-password");
+              }}
+              className="rounded-2xl border-slate-200 text-slate-700 font-bold text-xs gap-1.5 h-10 px-4 cursor-pointer"
             >
               <KeyRound className="h-3.5 w-3.5 text-slate-500" />
               <span>Change Password</span>

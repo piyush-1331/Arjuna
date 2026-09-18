@@ -44,6 +44,9 @@ function AppRoutes() {
       <Route path={"/"} component={LoginPage} />
       <Route path={"/login"} component={LoginPage} />
       <Route path={"/workspace"} component={LoginPage} />
+      <Route path={"/dashboard"} component={LoginPage} />
+      <Route path={"/home"} component={LoginPage} />
+      <Route path={"/index.html"} component={LoginPage} />
 
       {/* Password Recovery & Account Management */}
       <Route path={"/forgot-password"} component={ForgotPasswordPage} />

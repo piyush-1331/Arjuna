@@ -60,7 +60,7 @@ import {
 } from "lucide-react";
 
 export default function FacilityStaffWorkspace() {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState("facility_dashboard");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
@@ -167,27 +167,27 @@ export default function FacilityStaffWorkspace() {
 
   // Queries
   const utils = trpc.useUtils();
-  const overview = trpc.dashboard.overview.useQuery();
-  const inventory = trpc.inventory.list.useQuery();
-  const prescriptions = trpc.prescriptions.list.useQuery();
-  const medicineAnalytics = trpc.inventory.analytics.useQuery();
-  const transactionsQuery = trpc.inventory.transactions.useQuery();
-  const referrals = trpc.referrals.list.useQuery();
-  const patients = trpc.patients.list.useQuery();
+  const overview = trpc.dashboard.overview.useQuery(undefined, { enabled: isAuthenticated });
+  const inventory = trpc.inventory.list.useQuery(undefined, { enabled: isAuthenticated });
+  const prescriptions = trpc.prescriptions.list.useQuery(undefined, { enabled: isAuthenticated });
+  const medicineAnalytics = trpc.inventory.analytics.useQuery(undefined, { enabled: isAuthenticated });
+  const transactionsQuery = trpc.inventory.transactions.useQuery(undefined, { enabled: isAuthenticated });
+  const referrals = trpc.referrals.list.useQuery(undefined, { enabled: isAuthenticated });
+  const patients = trpc.patients.list.useQuery(undefined, { enabled: isAuthenticated });
 
   const referralTimelineQuery = trpc.referrals.getTimeline.useQuery(
     { id: selectedTimelineReferralId! },
-    { enabled: !!selectedTimelineReferralId }
+    { enabled: Boolean(isAuthenticated && selectedTimelineReferralId) }
   );
 
   const singleMedicineHistoryQuery = trpc.inventory.getById.useQuery(
     { id: selectedMedicineHistoryId! },
-    { enabled: !!selectedMedicineHistoryId }
+    { enabled: Boolean(isAuthenticated && selectedMedicineHistoryId) }
   );
 
   const facilityForecastsQuery = trpc.demandForecasting.getFacilityForecasts.useQuery(
     { facilityId: 1 },
-    { staleTime: 30000 }
+    { enabled: isAuthenticated, staleTime: 30000 }
   );
 
   const facilityForecasts = facilityForecastsQuery.data || [];
@@ -197,7 +197,7 @@ export default function FacilityStaffWorkspace() {
 
   const detailedForecastQuery = trpc.demandForecasting.getMedicineForecast.useQuery(
     { medicineId: effectiveForecastMedicineId, facilityId: 1 },
-    { enabled: !!effectiveForecastMedicineId, staleTime: 30000 }
+    { enabled: Boolean(isAuthenticated && effectiveForecastMedicineId), staleTime: 30000 }
   );
 
   // Mutations

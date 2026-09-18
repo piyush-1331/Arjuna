@@ -43,7 +43,7 @@ import {
 } from "lucide-react";
 
 export default function DoctorWorkspace() {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [searchPatientId, setSearchPatientId] = useState<number>(1);
 
@@ -146,13 +146,13 @@ export default function DoctorWorkspace() {
 
   // Queries
   const utils = trpc.useUtils();
-  const overview = trpc.dashboard.overview.useQuery();
-  const patients = trpc.patients.list.useQuery();
-  const appointments = trpc.appointments.list.useQuery();
-  const referrals = trpc.referrals.list.useQuery();
-  const prescriptions = trpc.prescriptions.list.useQuery();
-  const followUps = trpc.followUps.list.useQuery();
-  const healthWorkers = trpc.followUps.getWorkers.useQuery();
+  const overview = trpc.dashboard.overview.useQuery(undefined, { enabled: isAuthenticated });
+  const patients = trpc.patients.list.useQuery(undefined, { enabled: isAuthenticated });
+  const appointments = trpc.appointments.list.useQuery(undefined, { enabled: isAuthenticated });
+  const referrals = trpc.referrals.list.useQuery(undefined, { enabled: isAuthenticated });
+  const prescriptions = trpc.prescriptions.list.useQuery(undefined, { enabled: isAuthenticated });
+  const followUps = trpc.followUps.list.useQuery(undefined, { enabled: isAuthenticated });
+  const healthWorkers = trpc.followUps.getWorkers.useQuery(undefined, { enabled: isAuthenticated });
 
   const scheduleFollowUpMutation = trpc.followUps.schedule.useMutation({
     onSuccess: () => {
@@ -186,12 +186,12 @@ export default function DoctorWorkspace() {
     },
     onError: (err) => toast.error(err.message),
   });
-  const timeline = trpc.patients.timeline.useQuery({ id: searchPatientId }, { enabled: Boolean(searchPatientId) });
-  const inventory = trpc.inventory.list.useQuery();
-  const patientRiskQuery = trpc.risk.getPatientRiskProfile.useQuery({ patientId: consultForm.patientId });
+  const timeline = trpc.patients.timeline.useQuery({ id: searchPatientId }, { enabled: Boolean(isAuthenticated && searchPatientId) });
+  const inventory = trpc.inventory.list.useQuery(undefined, { enabled: isAuthenticated });
+  const patientRiskQuery = trpc.risk.getPatientRiskProfile.useQuery({ patientId: consultForm.patientId }, { enabled: Boolean(isAuthenticated && consultForm.patientId) });
   const patientContextQuery = trpc.consultations.getPatientContext.useQuery(
     { patientId: consultForm.patientId },
-    { enabled: Boolean(consultForm.patientId) }
+    { enabled: Boolean(isAuthenticated && consultForm.patientId) }
   );
 
   // Real-time stock check for Consultation Desk medicines

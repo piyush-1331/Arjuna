@@ -994,26 +994,35 @@ export default function HealthcareFacilityMap({
   };
 
   // Handle Geolocation (GPS)
-  const handleUseCurrentLocation = () => {
-    if (!navigator.geolocation) {
+  const handleUseCurrentLocation = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (typeof window === "undefined" || !navigator.geolocation) {
       toast.error("Geolocation is not supported by your browser");
       return;
     }
-    toast.loading("Acquiring GPS coordinates...");
+    const toastId = toast.loading("Acquiring GPS coordinates...");
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        toast.dismiss();
+        toast.dismiss(toastId);
         const userLat = pos.coords.latitude;
         const userLng = pos.coords.longitude;
         setOriginCoords({ lat: userLat, lng: userLng });
         setSelectedVillage("My GPS Location");
         toast.success(`Location set to (${userLat.toFixed(4)}, ${userLng.toFixed(4)})`);
         if (mapInstanceRef.current) {
-          mapInstanceRef.current.flyTo([userLat, userLng], 12, { duration: 1.2 });
+          try {
+            mapInstanceRef.current.flyTo([userLat, userLng], 12, { duration: 1.2 });
+          } catch (err) {
+            console.warn("Map flyTo error:", err);
+          }
         }
       },
-      () => {
-        toast.dismiss();
+      (err) => {
+        toast.dismiss(toastId);
+        console.warn("Geolocation error:", err);
         toast.info("Using default location (GPS unavailable or permission denied)");
         handleSelectVillage("Sundarpur");
       },
@@ -1134,8 +1143,13 @@ export default function HealthcareFacilityMap({
                 <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
                   <span>Origin Village / Location</span>
                   <button
-                    onClick={handleUseCurrentLocation}
-                    className="text-blue-600 font-semibold flex items-center gap-1 hover:underline text-[11px]"
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleUseCurrentLocation(e);
+                    }}
+                    className="text-blue-600 font-semibold flex items-center gap-1 hover:underline text-[11px] cursor-pointer"
                   >
                     <Locate className="h-3 w-3" /> My GPS
                   </button>
@@ -1143,9 +1157,14 @@ export default function HealthcareFacilityMap({
                 <div className="grid grid-cols-2 gap-1.5">
                   {villagesPool.slice(0, 6).map((v) => (
                     <button
+                      type="button"
                       key={v.id}
-                      onClick={() => handleSelectVillage(v.name)}
-                      className={`px-2.5 py-1.5 rounded-xl text-left font-medium border text-xs transition-colors ${
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleSelectVillage(v.name);
+                      }}
+                      className={`px-2.5 py-1.5 rounded-xl text-left font-medium border text-xs transition-colors cursor-pointer ${
                         selectedVillage === v.name
                           ? "bg-blue-600 text-white border-blue-600 shadow-xs"
                           : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
@@ -1221,8 +1240,13 @@ export default function HealthcareFacilityMap({
                   <label className="text-[11px] font-semibold text-slate-600 block">Critical Capabilities</label>
                   <div className="flex flex-wrap gap-1.5">
                     <button
-                      onClick={() => setFilterEmergency(!filterEmergency)}
-                      className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setFilterEmergency(!filterEmergency);
+                      }}
+                      className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors cursor-pointer ${
                         filterEmergency
                           ? "bg-rose-600 text-white border-rose-600 shadow-xs"
                           : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
@@ -1231,8 +1255,13 @@ export default function HealthcareFacilityMap({
                       🚨 24/7 Emergency
                     </button>
                     <button
-                      onClick={() => setFilterIcu(!filterIcu)}
-                      className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setFilterIcu(!filterIcu);
+                      }}
+                      className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors cursor-pointer ${
                         filterIcu
                           ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
                           : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
@@ -1241,8 +1270,13 @@ export default function HealthcareFacilityMap({
                       🛏️ ICU Available
                     </button>
                     <button
-                      onClick={() => setFilterOxygen(!filterOxygen)}
-                      className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setFilterOxygen(!filterOxygen);
+                      }}
+                      className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors cursor-pointer ${
                         filterOxygen
                           ? "bg-cyan-600 text-white border-cyan-600 shadow-xs"
                           : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
@@ -1251,8 +1285,13 @@ export default function HealthcareFacilityMap({
                       💨 Oxygen Support
                     </button>
                     <button
-                      onClick={() => setShowVillages(!showVillages)}
-                      className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setShowVillages(!showVillages);
+                      }}
+                      className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors cursor-pointer ${
                         showVillages
                           ? "bg-amber-100 text-amber-900 border-amber-300"
                           : "bg-slate-50 text-slate-700 border-slate-200"
@@ -1356,25 +1395,29 @@ export default function HealthcareFacilityMap({
                     {/* Action Buttons */}
                     <div className="mt-2.5 flex items-center justify-between gap-2">
                       <Button
+                        type="button"
                         size="sm"
                         variant="outline"
                         onClick={(e) => {
+                          e.preventDefault();
                           e.stopPropagation();
                           handleFocusFacility(fac);
                         }}
-                        className="text-[11px] h-7 rounded-full text-blue-700 border-blue-200 hover:bg-blue-50"
+                        className="text-[11px] h-7 rounded-full text-blue-700 border-blue-200 hover:bg-blue-50 cursor-pointer"
                       >
                         <Navigation className="mr-1 h-3 w-3" /> Focus &amp; Route
                       </Button>
 
                       {onSelectFacilityForReferral && (
                         <Button
+                          type="button"
                           size="sm"
                           onClick={(e) => {
+                            e.preventDefault();
                             e.stopPropagation();
                             onSelectFacilityForReferral(fac.facilityId, fac.name);
                           }}
-                          className="text-[11px] h-7 rounded-full bg-emerald-700 hover:bg-emerald-800 text-white"
+                          className="text-[11px] h-7 rounded-full bg-emerald-700 hover:bg-emerald-800 text-white cursor-pointer"
                         >
                           Refer Patient
                         </Button>
@@ -1411,10 +1454,15 @@ export default function HealthcareFacilityMap({
             </div>
 
             <Button
+              type="button"
               size="sm"
               variant="outline"
-              onClick={handleResetView}
-              className="text-[11px] h-7 rounded-full text-slate-600 hover:bg-slate-50"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleResetView();
+              }}
+              className="text-[11px] h-7 rounded-full text-slate-600 hover:bg-slate-50 cursor-pointer"
             >
               <RotateCcw className="mr-1 h-3 w-3" /> Reset View
             </Button>

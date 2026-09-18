@@ -10,6 +10,15 @@ import "./index.css";
 
 const queryClient = new QueryClient();
 
+const getAppRoot = () => {
+  if (typeof window === "undefined") return "/";
+  const pathname = window.location.pathname.toLowerCase();
+  if (pathname.startsWith("/arjuna")) {
+    return "/Arjuna/";
+  }
+  return "/";
+};
+
 const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;
   if (typeof window === "undefined") return;
@@ -18,11 +27,26 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!isUnauthorized) return;
 
   const path = window.location.pathname.toLowerCase();
-  if (path === "/" || path.endsWith("/login") || path.endsWith("/arjuna") || path.endsWith("/arjuna/")) {
+  if (
+    path === "/" ||
+    path === "/arjuna" ||
+    path === "/arjuna/" ||
+    path.endsWith("/login") ||
+    path.includes("/profile") ||
+    path.includes("/change-password") ||
+    path.includes("/facilities") ||
+    path.includes("/map") ||
+    path.includes("/pending-approval") ||
+    path.includes("/registration-rejected") ||
+    path.includes("/account-suspended") ||
+    path.includes("/forgot-password") ||
+    path.includes("/reset-password")
+  ) {
     return;
   }
 
-  window.location.assign("./");
+  // Use absolute root to prevent relative directory crawling (e.g. /dashboard/citizen -> /dashboard/ 404)
+  window.location.assign(getAppRoot());
 };
 
 queryClient.getQueryCache().subscribe(event => {

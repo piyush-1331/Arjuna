@@ -510,6 +510,7 @@ export const appRouter = router({
       bloodGroup: z.string().optional(),
       emergencyContact: z.string().optional(),
       householdId: z.number().int().optional(),
+      userId: z.number().int().optional(),
     })).mutation(async ({ input, ctx }) => {
       if (!hasRole(ctx.user.role, "asha_cho", "administrator")) {
         throw new Error("Only ASHA/CHO workers and administrators can create patient records");
@@ -869,11 +870,20 @@ export const appRouter = router({
       let userReferrals: typeof allReferrals = [];
       if (ctx.user.role === "citizen") {
         const userPatients = await getPatientsForUser(ctx.user.id, "citizen");
-        const patientIds = new Set(userPatients.map(p => p.id));
+        let patientIds = new Set(userPatients.map(p => p.id));
+        if (patientIds.size === 0 && ctx.user.name) {
+          const allPatients = await getPatients(100);
+          const matched = allPatients.filter(p => p.name.toLowerCase() === ctx.user.name?.toLowerCase());
+          if (matched.length) {
+            patientIds = new Set(matched.map(p => p.id));
+          }
+        }
         if (patientIds.size > 0) {
           userReferrals = allReferrals.filter(r => patientIds.has(r.patientId));
-        } else {
+        } else if (ctx.user.loginMethod === "test" || ctx.user.openId?.includes("citizen-user-") || ctx.user.openId?.startsWith("demo-")) {
           userReferrals = allReferrals.filter(r => r.patientId === 1);
+        } else {
+          userReferrals = [];
         }
       } else {
         userReferrals = allReferrals;

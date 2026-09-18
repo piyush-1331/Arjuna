@@ -24,32 +24,32 @@ export function mapUser(row: any, meta?: any) {
     id: Number(row.id),
     openId: row.open_id || row.auth_id || String(row.id),
     authId: row.auth_id || row.open_id,
-    name: row.name ?? m.full_name ?? m.name ?? null,
-    email: row.email ?? m.email ?? null,
-    loginMethod: row.login_method ?? m.login_method ?? null,
+    name: row.name || m.full_name || m.name || "Care Member",
+    email: row.email || m.email || null,
+    loginMethod: row.login_method || m.login_method || "supabase",
     role: row.role || m.selected_role || "citizen",
     status: (row.status || "APPROVED").toUpperCase(),
-    phone: row.phone ?? m.phone ?? null,
-    dateOfBirth: row.date_of_birth ?? m.date_of_birth ?? null,
-    age: (row.age != null ? Number(row.age) : null) ?? (m.age != null ? Number(m.age) : null),
-    gender: row.gender ?? m.gender ?? null,
-    village: row.village ?? m.village ?? null,
-    district: row.district ?? m.district ?? null,
+    phone: row.phone || m.phone || null,
+    dateOfBirth: row.date_of_birth || m.date_of_birth || null,
+    age: (row.age != null && !isNaN(Number(row.age)) ? Number(row.age) : null) ?? (m.age != null && !isNaN(Number(m.age)) ? Number(m.age) : null),
+    gender: row.gender || m.gender || null,
+    village: row.village || m.village || null,
+    district: row.district || m.district || null,
     facilityId: row.facility_id == null ? null : Number(row.facility_id),
-    facilityName: row.facility_name ?? m.facility_name ?? null,
-    designation: row.designation ?? m.designation ?? null,
-    employeeId: row.employee_id ?? m.employee_id ?? null,
-    registrationNumber: row.registration_number ?? m.registration_number ?? null,
-    assignedVillage: row.assigned_village ?? m.assigned_village ?? null,
-    emergencyContactName: row.emergency_contact_name ?? m.emergency_contact_name ?? null,
-    emergencyContactPhone: row.emergency_contact_phone ?? m.emergency_contact_phone ?? null,
-    bloodGroup: row.blood_group ?? m.blood_group ?? null,
-    allergies: row.allergies ?? m.allergies ?? null,
-    conditions: row.conditions ?? m.conditions ?? null,
-    address: row.address ?? m.address ?? null,
-    pincode: row.pincode ?? m.pincode ?? null,
-    abhaId: row.abha_id ?? m.abha_id ?? null,
-    avatarUrl: row.avatar_url ?? m.avatar_url ?? null,
+    facilityName: row.facility_name || m.facility_name || null,
+    designation: row.designation || m.designation || null,
+    employeeId: row.employee_id || m.employee_id || null,
+    registrationNumber: row.registration_number || m.registration_number || null,
+    assignedVillage: row.assigned_village || m.assigned_village || null,
+    emergencyContactName: row.emergency_contact_name || m.emergency_contact_name || null,
+    emergencyContactPhone: row.emergency_contact_phone || m.emergency_contact_phone || null,
+    bloodGroup: row.blood_group || m.blood_group || null,
+    allergies: row.allergies || m.allergies || null,
+    conditions: row.conditions || m.conditions || null,
+    address: row.address || m.address || null,
+    pincode: row.pincode || m.pincode || null,
+    abhaId: row.abha_id || m.abha_id || null,
+    avatarUrl: row.avatar_url || m.avatar_url || null,
     approvalRequestedAt: dateOrNull(row.approval_requested_at),
     approvedAt: dateOrNull(row.approved_at),
     approvedBy: row.approved_by,
@@ -226,38 +226,70 @@ export async function updateUserRole(userId: number, role: string) {
 }
 
 export async function getUserByOpenId(openId: string, preloadedMeta?: any) {
-  const row = unwrap(await client().from("profiles").select("*").eq("open_id", openId).maybeSingle());
-  if (!row) return undefined;
-  let meta = preloadedMeta;
-  if (!meta && supabaseAdmin && (row.auth_id || row.open_id)) {
+  try {
+    const row = unwrap(await client().from("profiles").select("*").eq("open_id", openId).maybeSingle());
+    if (row) {
+      let meta = preloadedMeta;
+      if (!meta && supabaseAdmin && (row.auth_id || row.open_id)) {
+        try {
+          const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(row.auth_id || row.open_id);
+          if (authUser?.user?.user_metadata) {
+            meta = authUser.user.user_metadata;
+          }
+        } catch {
+          // Ignore
+        }
+      }
+      return mapUser(row, meta);
+    }
+  } catch (err) {
+    console.warn("[Supabase] getUserByOpenId query warning:", err);
+  }
+
+  // If not found in profiles table, check Supabase Auth directly
+  if (supabaseAdmin) {
     try {
-      const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(row.auth_id || row.open_id);
-      if (authUser?.user?.user_metadata) {
-        meta = authUser.user.user_metadata;
+      const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(openId);
+      if (authUser?.user) {
+        const u = authUser.user;
+        const meta = preloadedMeta || u.user_metadata || {};
+        return mapUser({
+          id: 1,
+          open_id: u.id,
+          auth_id: u.id,
+          email: u.email,
+          created_at: u.created_at,
+        }, meta);
       }
     } catch {
       // Ignore
     }
   }
-  return mapUser(row, meta);
+  return undefined;
 }
 
 export async function getUserById(id: number) {
-  const row = unwrap(await client().from("profiles").select("*").eq("id", id).maybeSingle());
-  if (!row) return undefined;
-  let meta: any = null;
-  const authId = row.auth_id || row.open_id;
-  if (authId && supabaseAdmin) {
-    try {
-      const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(authId);
-      if (authUser?.user?.user_metadata) {
-        meta = authUser.user.user_metadata;
+  try {
+    const row = unwrap(await client().from("profiles").select("*").eq("id", id).maybeSingle());
+    if (row) {
+      let meta: any = null;
+      const authId = row.auth_id || row.open_id;
+      if (authId && supabaseAdmin) {
+        try {
+          const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(authId);
+          if (authUser?.user?.user_metadata) {
+            meta = authUser.user.user_metadata;
+          }
+        } catch {
+          // Ignore if auth lookup fails
+        }
       }
-    } catch {
-      // Ignore if auth lookup fails
+      return mapUser(row, meta);
     }
+  } catch (err) {
+    console.warn("[Supabase] getUserById query warning:", err);
   }
-  return mapUser(row, meta);
+  return undefined;
 }
 
 export async function listUsers(filter?: { role?: string; status?: string; district?: string; facilityId?: number; search?: string }) {
@@ -366,98 +398,110 @@ export async function reactivateStaffUser(adminIdentifier: string, userId: numbe
 }
 
 export async function updateUserProfile(userId: number, editableFields: Record<string, unknown>) {
-  // Fetch existing profile to retrieve auth_id / open_id
-  const currentProfile = unwrap(await client().from("profiles").select("*").eq("id", userId).maybeSingle());
-  if (!currentProfile) throw new Error("Profile not found");
-
-  const authId = currentProfile.auth_id || currentProfile.open_id;
-
-  // Build metadata update for Supabase Auth (supports all fields seamlessly)
-  const metadataUpdate: Record<string, unknown> = {};
-  if (editableFields.name !== undefined) {
-    metadataUpdate.name = editableFields.name;
-    metadataUpdate.full_name = editableFields.name;
-  }
-  if (editableFields.phone !== undefined) metadataUpdate.phone = editableFields.phone;
-  if (editableFields.dateOfBirth !== undefined) metadataUpdate.date_of_birth = editableFields.dateOfBirth;
-  if (editableFields.age !== undefined) metadataUpdate.age = editableFields.age;
-  if (editableFields.gender !== undefined) metadataUpdate.gender = editableFields.gender;
-  if (editableFields.village !== undefined) metadataUpdate.village = editableFields.village;
-  if (editableFields.district !== undefined) metadataUpdate.district = editableFields.district;
-  if (editableFields.emergencyContactName !== undefined) metadataUpdate.emergency_contact_name = editableFields.emergencyContactName;
-  if (editableFields.emergencyContactPhone !== undefined) metadataUpdate.emergency_contact_phone = editableFields.emergencyContactPhone;
-  if (editableFields.bloodGroup !== undefined) metadataUpdate.blood_group = editableFields.bloodGroup;
-  if (editableFields.allergies !== undefined) metadataUpdate.allergies = editableFields.allergies;
-  if (editableFields.conditions !== undefined) metadataUpdate.conditions = editableFields.conditions;
-  if (editableFields.address !== undefined) metadataUpdate.address = editableFields.address;
-  if (editableFields.pincode !== undefined) metadataUpdate.pincode = editableFields.pincode;
-  if (editableFields.abhaId !== undefined) metadataUpdate.abha_id = editableFields.abhaId;
-  if (editableFields.avatarUrl !== undefined) metadataUpdate.avatar_url = editableFields.avatarUrl;
-
-  // 1. Persist to Supabase Auth user_metadata (guaranteed to persist regardless of table schema)
-  if (authId && supabaseAdmin) {
-    try {
-      const { data: currentAuth } = await supabaseAdmin.auth.admin.getUserById(authId);
-      const existingMeta = currentAuth?.user?.user_metadata || {};
-      const mergedMeta = { ...existingMeta, ...metadataUpdate };
-      await supabaseAdmin.auth.admin.updateUserById(authId, {
-        user_metadata: mergedMeta,
-      });
-    } catch (metaErr) {
-      console.warn("[Supabase] Auth user_metadata sync warning:", metaErr);
-    }
-  }
-
-  // 2. Persist to Supabase profiles PostgreSQL table
-  const forbidden = ["role", "status", "approved_by", "approved_at", "rejection_reason", "employee_id", "registration_number", "facility_id", "open_id", "auth_id", "id"];
-  const safePayload: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(editableFields)) {
-    const snake = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
-    if (!forbidden.includes(snake)) {
-      safePayload[snake] = value;
-    }
-  }
-  safePayload.updated_at = new Date().toISOString();
-
-  const { error } = await client().from("profiles").update(safePayload).eq("id", userId);
-  if (error) {
-    // If PostgreSQL table lacks custom columns, update standard base columns that exist
-    const baseColumns = ["name", "district", "updated_at"];
-    const fallbackPayload: Record<string, unknown> = { updated_at: safePayload.updated_at };
-    for (const col of baseColumns) {
-      if (safePayload[col] !== undefined) fallbackPayload[col] = safePayload[col];
-    }
-    try {
-      await client().from("profiles").update(fallbackPayload).eq("id", userId);
-    } catch (retryErr) {
-      console.warn("[Supabase] Fallback profile table update warning:", retryErr);
-    }
-  }
-
-  // 3. Sync to patients table if user has a corresponding citizen patient profile
   try {
-    const patientUpdate: Record<string, unknown> = {
-      updated_at: new Date().toISOString(),
-    };
-    if (editableFields.name !== undefined) patientUpdate.name = editableFields.name;
-    if (editableFields.age !== undefined) patientUpdate.age = Number(editableFields.age) || null;
-    if (editableFields.gender !== undefined) patientUpdate.gender = editableFields.gender;
-    if (editableFields.phone !== undefined) patientUpdate.contact = editableFields.phone;
-    if (editableFields.village !== undefined) patientUpdate.village = editableFields.village;
-    if (editableFields.district !== undefined) patientUpdate.district = editableFields.district;
-    if (editableFields.emergencyContactPhone !== undefined || editableFields.emergencyContactName !== undefined) {
-      patientUpdate.emergency_contact = (editableFields.emergencyContactPhone as string) || (editableFields.emergencyContactName as string);
+    // Fetch existing profile to retrieve auth_id / open_id
+    let currentProfile: any = null;
+    try {
+      currentProfile = unwrap(await client().from("profiles").select("*").eq("id", userId).maybeSingle());
+    } catch (fetchErr) {
+      console.warn("[Supabase] Fetch profile by id warning:", fetchErr);
     }
-    if (editableFields.bloodGroup !== undefined) patientUpdate.blood_group = editableFields.bloodGroup;
-    if (editableFields.allergies !== undefined) patientUpdate.allergies = editableFields.allergies;
-    if (editableFields.conditions !== undefined) patientUpdate.conditions = editableFields.conditions;
 
-    await client().from("patients").update(patientUpdate).eq("user_id", userId);
-  } catch (syncErr) {
-    console.warn("[Supabase] Optional patient record sync skipped:", syncErr);
+    const authId = currentProfile?.auth_id || currentProfile?.open_id;
+
+    // Build metadata update for Supabase Auth (supports all fields seamlessly)
+    const metadataUpdate: Record<string, unknown> = {};
+    if (editableFields.name !== undefined) {
+      metadataUpdate.name = editableFields.name;
+      metadataUpdate.full_name = editableFields.name;
+    }
+    if (editableFields.phone !== undefined) metadataUpdate.phone = editableFields.phone;
+    if (editableFields.dateOfBirth !== undefined) metadataUpdate.date_of_birth = editableFields.dateOfBirth;
+    if (editableFields.age !== undefined) metadataUpdate.age = editableFields.age;
+    if (editableFields.gender !== undefined) metadataUpdate.gender = editableFields.gender;
+    if (editableFields.village !== undefined) metadataUpdate.village = editableFields.village;
+    if (editableFields.district !== undefined) metadataUpdate.district = editableFields.district;
+    if (editableFields.emergencyContactName !== undefined) metadataUpdate.emergency_contact_name = editableFields.emergencyContactName;
+    if (editableFields.emergencyContactPhone !== undefined) metadataUpdate.emergency_contact_phone = editableFields.emergencyContactPhone;
+    if (editableFields.bloodGroup !== undefined) metadataUpdate.blood_group = editableFields.bloodGroup;
+    if (editableFields.allergies !== undefined) metadataUpdate.allergies = editableFields.allergies;
+    if (editableFields.conditions !== undefined) metadataUpdate.conditions = editableFields.conditions;
+    if (editableFields.address !== undefined) metadataUpdate.address = editableFields.address;
+    if (editableFields.pincode !== undefined) metadataUpdate.pincode = editableFields.pincode;
+    if (editableFields.abhaId !== undefined) metadataUpdate.abha_id = editableFields.abhaId;
+    if (editableFields.avatarUrl !== undefined) metadataUpdate.avatar_url = editableFields.avatarUrl;
+
+    // 1. Persist to Supabase Auth user_metadata (guaranteed to persist regardless of table schema)
+    if (authId && supabaseAdmin) {
+      try {
+        const { data: currentAuth } = await supabaseAdmin.auth.admin.getUserById(authId);
+        const existingMeta = currentAuth?.user?.user_metadata || {};
+        const mergedMeta = { ...existingMeta, ...metadataUpdate };
+        await supabaseAdmin.auth.admin.updateUserById(authId, {
+          user_metadata: mergedMeta,
+        });
+      } catch (metaErr) {
+        console.warn("[Supabase] Auth user_metadata sync warning:", metaErr);
+      }
+    }
+
+    // 2. Persist to Supabase profiles PostgreSQL table
+    if (currentProfile) {
+      const forbidden = ["role", "status", "approved_by", "approved_at", "rejection_reason", "employee_id", "registration_number", "facility_id", "open_id", "auth_id", "id"];
+      const safePayload: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(editableFields)) {
+        const snake = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+        if (!forbidden.includes(snake)) {
+          safePayload[snake] = value;
+        }
+      }
+      safePayload.updated_at = new Date().toISOString();
+
+      const { error } = await client().from("profiles").update(safePayload).eq("id", userId);
+      if (error) {
+        // If PostgreSQL table lacks custom columns, update standard base columns that exist
+        const baseColumns = ["name", "district", "updated_at"];
+        const fallbackPayload: Record<string, unknown> = { updated_at: safePayload.updated_at };
+        for (const col of baseColumns) {
+          if (safePayload[col] !== undefined) fallbackPayload[col] = safePayload[col];
+        }
+        try {
+          await client().from("profiles").update(fallbackPayload).eq("id", userId);
+        } catch (retryErr) {
+          console.warn("[Supabase] Fallback profile table update warning:", retryErr);
+        }
+      }
+    }
+
+    // 3. Sync to patients table if user has a corresponding citizen patient profile
+    try {
+      const patientUpdate: Record<string, unknown> = {
+        updated_at: new Date().toISOString(),
+      };
+      if (editableFields.name !== undefined) patientUpdate.name = editableFields.name;
+      if (editableFields.age !== undefined) patientUpdate.age = Number(editableFields.age) || null;
+      if (editableFields.gender !== undefined) patientUpdate.gender = editableFields.gender;
+      if (editableFields.phone !== undefined) patientUpdate.contact = editableFields.phone;
+      if (editableFields.village !== undefined) patientUpdate.village = editableFields.village;
+      if (editableFields.district !== undefined) patientUpdate.district = editableFields.district;
+      if (editableFields.emergencyContactPhone !== undefined || editableFields.emergencyContactName !== undefined) {
+        patientUpdate.emergency_contact = (editableFields.emergencyContactPhone as string) || (editableFields.emergencyContactName as string);
+      }
+      if (editableFields.bloodGroup !== undefined) patientUpdate.blood_group = editableFields.bloodGroup;
+      if (editableFields.allergies !== undefined) patientUpdate.allergies = editableFields.allergies;
+      if (editableFields.conditions !== undefined) patientUpdate.conditions = editableFields.conditions;
+
+      await client().from("patients").update(patientUpdate).eq("user_id", userId);
+    } catch (syncErr) {
+      console.warn("[Supabase] Optional patient record sync skipped:", syncErr);
+    }
+
+    const updatedUser = await getUserById(userId);
+    if (updatedUser) return updatedUser;
+  } catch (err) {
+    console.warn("[Supabase] updateUserProfile error, falling back to local store:", err);
   }
-
-  return getUserById(userId);
+  return undefined;
 }
 
 export async function getPatients(limit = 50) { return many(unwrap(await client().from("patients").select("*").order("updated_at", { ascending: false }).limit(limit))).map(mapPatient); }

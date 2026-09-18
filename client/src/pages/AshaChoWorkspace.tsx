@@ -54,7 +54,7 @@ import HealthcareFacilityMap from "@/components/HealthcareFacilityMap";
 import { VillageAccessibilityDashboard } from "@/components/VillageAccessibilityDashboard";
 
 export default function AshaChoWorkspace() {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState("village_dashboard");
   const [selectedPatientForScreening, setSelectedPatientForScreening] = useState<number | string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -198,13 +198,13 @@ export default function AshaChoWorkspace() {
 
   // tRPC queries & mutations
   const utils = trpc.useUtils();
-  const overview = trpc.dashboard.overview.useQuery();
-  const patients = trpc.patients.list.useQuery();
-  const households = trpc.households.list.useQuery();
-  const referrals = trpc.referrals.list.useQuery();
-  const followUps = trpc.followUps.list.useQuery();
-  const campaigns = trpc.campaigns.list.useQuery();
-  const facilities = trpc.facilities.list.useQuery();
+  const overview = trpc.dashboard.overview.useQuery(undefined, { enabled: isAuthenticated });
+  const patients = trpc.patients.list.useQuery(undefined, { enabled: isAuthenticated });
+  const households = trpc.households.list.useQuery(undefined, { enabled: isAuthenticated });
+  const referrals = trpc.referrals.list.useQuery(undefined, { enabled: isAuthenticated });
+  const followUps = trpc.followUps.list.useQuery(undefined, { enabled: isAuthenticated });
+  const campaigns = trpc.campaigns.list.useQuery(undefined, { enabled: isAuthenticated });
+  const facilities = trpc.facilities.list.useQuery(undefined, { enabled: isAuthenticated });
 
   const referralRecommendations = trpc.referrals.recommend.useQuery(
     {
@@ -213,7 +213,7 @@ export default function AshaChoWorkspace() {
       urgency: referralForm.urgency,
       originVillage: "Sundarpur",
     },
-    { enabled: showCreateReferral }
+    { enabled: Boolean(isAuthenticated && showCreateReferral) }
   );
 
   const confirmReferral = trpc.referrals.confirm.useMutation({

@@ -124,4 +124,60 @@ describe("Profile Persistence and Complete Demographic Storage", () => {
     expect(userAfter?.bloodGroup).toBe("B+");
     expect(userAfter?.village).toBe("Sundarpur");
   });
+
+  it("ensures new citizens only see their own data and profile updates link patient record", async () => {
+    // 1. Create a brand new citizen user with id 555
+    const newCitizen = await db.upsertUser({
+      openId: "new-citizen-uuid-555",
+      name: "Pooja Verma",
+      email: "pooja@example.com",
+      role: "citizen",
+      loginMethod: "supabase",
+    });
+
+    const citizenCaller = appRouter.createCaller({
+      user: newCitizen as any,
+      req: {} as any,
+      res: { clearCookie: () => {} } as any,
+    });
+
+    // 2. Before any records are created, new citizen must see 0 referrals, 0 prescriptions, 0 follow-ups (no mock data from patient 1)
+    const initialReferrals = await citizenCaller.referrals.citizenList();
+    expect(initialReferrals).toEqual([]);
+
+    const initialPrescriptions = await citizenCaller.prescriptions.list();
+    expect(initialPrescriptions).toEqual([]);
+
+    const initialFollowUps = await citizenCaller.followUps.citizenUpcoming();
+    expect(initialFollowUps).toEqual([]);
+
+    // 3. User edits and saves their profile
+    const updateResult = await citizenCaller.profile.update({
+      name: "Pooja K. Verma",
+      phone: "+91 98765 43210",
+      age: 28,
+      gender: "female",
+      village: "Sonwadi",
+      district: "Ahmedabad Rural",
+      bloodGroup: "A+",
+      allergies: "Dust, Peanuts",
+      conditions: "None",
+      abhaId: "91-8201-5555-4444",
+      emergencyContactName: "Karan Verma",
+      emergencyContactPhone: "+91 98765 00000",
+    });
+
+    expect(updateResult.success).toBe(true);
+    expect(updateResult.profile.name).toBe("Pooja K. Verma");
+    expect(updateResult.profile.bloodGroup).toBe("A+");
+
+    // 4. Verify patient record was automatically created/linked for user 555
+    const userPatients = await db.getPatientsForUser(newCitizen!.id, "citizen");
+    expect(userPatients.length).toBe(1);
+    expect(userPatients[0].name).toBe("Pooja K. Verma");
+    expect(userPatients[0].userId).toBe(newCitizen!.id);
+    expect(userPatients[0].bloodGroup).toBe("A+");
+    expect(userPatients[0].allergies).toBe("Dust, Peanuts");
+    expect(userPatients[0].emergencyContact).toBe("+91 98765 00000");
+  });
 });

@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import EditProfileModal from "@/components/EditProfileModal";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,6 +51,7 @@ export default function ProfileDropdownMenu({ align = "end", className }: Profil
   const { user, logout } = useAuth();
   const { theme, setTheme } = useTheme();
   const [, setLocation] = useLocation();
+  const [showEditModal, setShowEditModal] = useState(false);
 
   if (!user) return null;
 
@@ -100,130 +102,146 @@ export default function ProfileDropdownMenu({ align = "end", className }: Profil
   };
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          className={`flex items-center gap-2.5 rounded-full p-1 transition hover:bg-slate-100/80 dark:hover:bg-slate-800/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 ${className || ""}`}
-          aria-label="Open profile menu"
-          title="Open profile menu"
-        >
-          <Avatar className="h-9 w-9 border border-black/10 dark:border-white/10 shadow-xs ring-1 ring-black/5 bg-[#15181b] dark:bg-slate-800 text-white">
-            {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.name || "User Avatar"} />}
-            <AvatarFallback className="bg-[#15181b] dark:bg-slate-800 text-white text-xs font-bold tracking-tight">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
-        </button>
-      </DropdownMenuTrigger>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            className={`flex items-center gap-2.5 rounded-full p-1 transition hover:bg-slate-100/80 dark:hover:bg-slate-800/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 ${className || ""}`}
+            aria-label="Open profile menu"
+            title="Open profile menu"
+          >
+            <Avatar className="h-9 w-9 border border-black/10 dark:border-white/10 shadow-xs ring-1 ring-black/5 bg-[#15181b] dark:bg-slate-800 text-white">
+              {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.name || "User Avatar"} />}
+              <AvatarFallback className="bg-[#15181b] dark:bg-slate-800 text-white text-xs font-bold tracking-tight">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+          </button>
+        </DropdownMenuTrigger>
 
-      <DropdownMenuContent
-        align={align}
-        className="w-72 rounded-2xl border border-black/10 dark:border-slate-800 bg-white dark:bg-slate-900 p-2 shadow-2xl z-50 animate-in fade-in zoom-in-95"
-      >
-        {/* Profile Card Header */}
-        <DropdownMenuLabel className="p-3">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-extrabold text-slate-900 dark:text-slate-100 truncate">{user.name || "Care Member"}</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">{user.email || "No email"}</p>
+        <DropdownMenuContent
+          align={align}
+          className="w-72 rounded-2xl border border-black/10 dark:border-slate-800 bg-white dark:bg-slate-900 p-2 shadow-2xl z-50 animate-in fade-in zoom-in-95"
+        >
+          {/* Profile Card Header */}
+          <DropdownMenuLabel className="p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-extrabold text-slate-900 dark:text-slate-100 truncate">{user.name || "Care Member"}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">{user.email || "No email"}</p>
+              </div>
+              {getStatusBadge()}
             </div>
-            {getStatusBadge()}
-          </div>
-          <div className="mt-2.5 flex items-center gap-2">
-            <span className="rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-              Role: {roleDisplayNames[user.role] || user.role}
-            </span>
-            {user.district && (
-              <span className="text-[11px] text-slate-400 dark:text-slate-500 truncate">· {user.district}</span>
-            )}
-          </div>
-        </DropdownMenuLabel>
+            <div className="mt-2.5 flex items-center gap-2">
+              <span className="rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                Role: {roleDisplayNames[user.role] || user.role}
+              </span>
+              {user.district && (
+                <span className="text-[11px] text-slate-400 dark:text-slate-500 truncate">· {user.district}</span>
+              )}
+            </div>
+          </DropdownMenuLabel>
 
-        <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-800 my-1" />
+          <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-800 my-1" />
 
-        {/* Navigation Options */}
-        <DropdownMenuGroup>
-          <DropdownMenuItem
-            onClick={() => setLocation("/profile")}
-            className="cursor-pointer rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 focus:bg-slate-100 dark:focus:bg-slate-800 gap-2.5"
-          >
-            <User className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-            <span>View Profile</span>
-          </DropdownMenuItem>
-
-          <DropdownMenuItem
-            onClick={() => setLocation("/profile?edit=true")}
-            className="cursor-pointer rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 focus:bg-slate-100 dark:focus:bg-slate-800 gap-2.5"
-          >
-            <UserCog className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-            <span>Edit Profile</span>
-          </DropdownMenuItem>
-
-          <DropdownMenuItem
-            onClick={() => setLocation("/change-password")}
-            className="cursor-pointer rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 focus:bg-slate-100 dark:focus:bg-slate-800 gap-2.5"
-          >
-            <KeyRound className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-            <span>Change Password</span>
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-
-        <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-800 my-1" />
-
-        {/* Appearance / Dark Mode Selector */}
-        <div className="px-3 py-1.5">
-          <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">Theme</div>
-          <div className="grid grid-cols-3 gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-            <button
-              type="button"
-              onClick={() => setTheme("light")}
-              className={`flex items-center justify-center gap-1.5 py-1 rounded-lg text-[11px] font-semibold transition ${
-                theme === "light"
-                  ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-              }`}
+          {/* Navigation Options */}
+          <DropdownMenuGroup>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.preventDefault();
+                setLocation("/profile");
+              }}
+              className="cursor-pointer rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 focus:bg-slate-100 dark:focus:bg-slate-800 gap-2.5"
             >
-              <Sun className="h-3 w-3 text-amber-500" />
-              <span>Light</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setTheme("dark")}
-              className={`flex items-center justify-center gap-1.5 py-1 rounded-lg text-[11px] font-semibold transition ${
-                theme === "dark"
-                  ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-              }`}
+              <User className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+              <span>View Profile</span>
+            </DropdownMenuItem>
+
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.preventDefault();
+                setShowEditModal(true);
+              }}
+              className="cursor-pointer rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 focus:bg-slate-100 dark:focus:bg-slate-800 gap-2.5"
             >
-              <Moon className="h-3 w-3 text-amber-400" />
-              <span>Dark</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setTheme("system")}
-              className={`flex items-center justify-center gap-1.5 py-1 rounded-lg text-[11px] font-semibold transition ${
-                theme === "system"
-                  ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-              }`}
+              <UserCog className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+              <span>Edit Profile</span>
+            </DropdownMenuItem>
+
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.preventDefault();
+                setLocation("/change-password");
+              }}
+              className="cursor-pointer rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 focus:bg-slate-100 dark:focus:bg-slate-800 gap-2.5"
             >
-              <Monitor className="h-3 w-3 text-slate-400" />
-              <span>Auto</span>
-            </button>
+              <KeyRound className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+              <span>Change Password</span>
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+
+          <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-800 my-1" />
+
+          {/* Appearance / Dark Mode Selector */}
+          <div className="px-3 py-1.5">
+            <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">Theme</div>
+            <div className="grid grid-cols-3 gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setTheme("light")}
+                className={`flex items-center justify-center gap-1.5 py-1 rounded-lg text-[11px] font-semibold transition ${
+                  theme === "light"
+                    ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                }`}
+              >
+                <Sun className="h-3 w-3 text-amber-500" />
+                <span>Light</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTheme("dark")}
+                className={`flex items-center justify-center gap-1.5 py-1 rounded-lg text-[11px] font-semibold transition ${
+                  theme === "dark"
+                    ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                }`}
+              >
+                <Moon className="h-3 w-3 text-amber-400" />
+                <span>Dark</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTheme("system")}
+                className={`flex items-center justify-center gap-1.5 py-1 rounded-lg text-[11px] font-semibold transition ${
+                  theme === "system"
+                    ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                }`}
+              >
+                <Monitor className="h-3 w-3 text-slate-400" />
+                <span>Auto</span>
+              </button>
+            </div>
           </div>
-        </div>
 
-        <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-800 my-1" />
+          <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-800 my-1" />
 
-        {/* Sign out */}
-        <DropdownMenuItem
-          onClick={() => logout()}
-          className="cursor-pointer rounded-xl px-3 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 hover:text-rose-700 dark:hover:text-rose-300 focus:bg-rose-50 dark:focus:bg-rose-950/50 gap-2.5"
-        >
-          <LogOut className="h-4 w-4 text-rose-500 dark:text-rose-400" />
-          <span>Sign out</span>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          {/* Sign out */}
+          <DropdownMenuItem
+            onClick={() => logout()}
+            className="cursor-pointer rounded-xl px-3 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 hover:text-rose-700 dark:hover:text-rose-300 focus:bg-rose-50 dark:focus:bg-rose-950/50 gap-2.5"
+          >
+            <LogOut className="h-4 w-4 text-rose-500 dark:text-rose-400" />
+            <span>Sign out</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <EditProfileModal
+        open={showEditModal}
+        onOpenChange={setShowEditModal}
+      />
+    </>
   );
 }

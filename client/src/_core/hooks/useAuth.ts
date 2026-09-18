@@ -126,7 +126,7 @@ export function useAuth() {
 
     // Redirect to home/login screen
     if (typeof window !== "undefined") {
-      const base = window.location.pathname.toLowerCase().startsWith("/arjuna") ? "/Arjuna/" : "./";
+      const base = window.location.pathname.toLowerCase().startsWith("/arjuna") ? "/Arjuna/" : "/";
       window.location.assign(base);
     }
   }, [utils, logoutMutation]);

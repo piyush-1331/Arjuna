@@ -733,8 +733,14 @@ export function getHistoricalMedicineConsumption(facilityId?: number, district?:
 // Initialize memory store on startup
 initMemoryStore();
 
-export async function upsertUser(user: Record<string, any>): Promise<void> {
-  if (supabaseDb.isSupabaseDataConfigured()) return supabaseDb.upsertUser(user);
+export async function upsertUser(user: Record<string, any>): Promise<any> {
+  if (supabaseDb.isSupabaseDataConfigured()) {
+    try {
+      await supabaseDb.upsertUser(user);
+    } catch (sbErr) {
+      console.warn("[Database] Supabase upsertUser warning:", sbErr);
+    }
+  }
   
   // In-memory update or insert
   const existingIdx = memUsers.findIndex(u => u.openId === user.openId);
@@ -871,10 +877,18 @@ export async function upsertUser(user: Record<string, any>): Promise<void> {
     updateSet.lastSignedIn ??= now;
     await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
   }
+
+  return cleanUserRecord;
 }
 
 export async function updateUserRole(userId: number, role: "citizen" | "asha" | "cho" | "asha_cho" | "doctor" | "facility_staff" | "administrator" | "admin") {
-  if (supabaseDb.isSupabaseDataConfigured()) return supabaseDb.updateUserRole(userId, role);
+  if (supabaseDb.isSupabaseDataConfigured()) {
+    try {
+      await supabaseDb.updateUserRole(userId, role);
+    } catch (err) {
+      console.warn("[Database] Supabase updateUserRole warning:", err);
+    }
+  }
   const user = memUsers.find(u => u.id === userId);
   if (user) {
     user.role = role;
@@ -887,32 +901,57 @@ export async function updateUserRole(userId: number, role: "citizen" | "asha" | 
 }
 
 export async function getUserByOpenId(openId: string, preloadedMeta?: any) {
-  if (supabaseDb.isSupabaseDataConfigured()) return supabaseDb.getUserByOpenId(openId, preloadedMeta);
+  if (supabaseDb.isSupabaseDataConfigured()) {
+    try {
+      const user = await supabaseDb.getUserByOpenId(openId, preloadedMeta);
+      if (user) return user;
+    } catch (err) {
+      console.warn("[Database] Supabase getUserByOpenId warning:", err);
+    }
+  }
   const demoUser = memUsers.find(u => u.openId === openId || u.authId === openId);
   if (demoUser) return demoUser;
 
   const db = await getDb();
   if (db) {
-    const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
-    if (result[0]) return result[0];
+    try {
+      const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+      if (result[0]) return result[0];
+    } catch { /* fallback */ }
   }
   return undefined;
 }
 
 export async function getUserById(id: number) {
-  if (supabaseDb.isSupabaseDataConfigured()) return supabaseDb.getUserById(id);
+  if (supabaseDb.isSupabaseDataConfigured()) {
+    try {
+      const user = await supabaseDb.getUserById(id);
+      if (user) return user;
+    } catch (err) {
+      console.warn("[Database] Supabase getUserById warning:", err);
+    }
+  }
   const memUser = memUsers.find(u => u.id === id);
   if (memUser) return memUser;
   const db = await getDb();
   if (db) {
-    const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
-    if (result[0]) return result[0];
+    try {
+      const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+      if (result[0]) return result[0];
+    } catch { /* fallback */ }
   }
   return undefined;
 }
 
 export async function listUsers(filter?: { role?: string; status?: string; district?: string; facilityId?: number; search?: string }) {
-  if (supabaseDb.isSupabaseDataConfigured()) return supabaseDb.listUsers(filter);
+  if (supabaseDb.isSupabaseDataConfigured()) {
+    try {
+      const usersList = await supabaseDb.listUsers(filter);
+      if (usersList && usersList.length > 0) return usersList;
+    } catch (err) {
+      console.warn("[Database] Supabase listUsers warning:", err);
+    }
+  }
   let result = [...memUsers];
   if (filter?.role && filter.role !== "all") {
     result = result.filter(u => u.role === filter.role || (filter.role === "admin" && (u.role === "admin" || u.role === "administrator")));
@@ -940,7 +979,13 @@ export async function listUsers(filter?: { role?: string; status?: string; distr
 }
 
 export async function approveStaffUser(adminIdentifier: string, userId: number) {
-  if (supabaseDb.isSupabaseDataConfigured()) return supabaseDb.approveStaffUser(adminIdentifier, userId);
+  if (supabaseDb.isSupabaseDataConfigured()) {
+    try {
+      await supabaseDb.approveStaffUser(adminIdentifier, userId);
+    } catch (err) {
+      console.warn("[Database] Supabase approveStaffUser warning:", err);
+    }
+  }
   const user = memUsers.find(u => u.id === userId);
   if (user) {
     user.status = "APPROVED";
@@ -952,7 +997,13 @@ export async function approveStaffUser(adminIdentifier: string, userId: number) 
 }
 
 export async function rejectStaffUser(adminIdentifier: string, userId: number, reason: string) {
-  if (supabaseDb.isSupabaseDataConfigured()) return supabaseDb.rejectStaffUser(adminIdentifier, userId, reason);
+  if (supabaseDb.isSupabaseDataConfigured()) {
+    try {
+      await supabaseDb.rejectStaffUser(adminIdentifier, userId, reason);
+    } catch (err) {
+      console.warn("[Database] Supabase rejectStaffUser warning:", err);
+    }
+  }
   const user = memUsers.find(u => u.id === userId);
   if (user) {
     user.status = "REJECTED";
@@ -963,7 +1014,13 @@ export async function rejectStaffUser(adminIdentifier: string, userId: number, r
 }
 
 export async function suspendStaffUser(adminIdentifier: string, userId: number) {
-  if (supabaseDb.isSupabaseDataConfigured()) return supabaseDb.suspendStaffUser(adminIdentifier, userId);
+  if (supabaseDb.isSupabaseDataConfigured()) {
+    try {
+      await supabaseDb.suspendStaffUser(adminIdentifier, userId);
+    } catch (err) {
+      console.warn("[Database] Supabase suspendStaffUser warning:", err);
+    }
+  }
   const user = memUsers.find(u => u.id === userId);
   if (user) {
     user.status = "SUSPENDED";
@@ -972,7 +1029,13 @@ export async function suspendStaffUser(adminIdentifier: string, userId: number) 
 }
 
 export async function reactivateStaffUser(adminIdentifier: string, userId: number) {
-  if (supabaseDb.isSupabaseDataConfigured()) return supabaseDb.reactivateStaffUser(adminIdentifier, userId);
+  if (supabaseDb.isSupabaseDataConfigured()) {
+    try {
+      await supabaseDb.reactivateStaffUser(adminIdentifier, userId);
+    } catch (err) {
+      console.warn("[Database] Supabase reactivateStaffUser warning:", err);
+    }
+  }
   const user = memUsers.find(u => u.id === userId);
   if (user) {
     user.status = "APPROVED";
@@ -981,9 +1044,37 @@ export async function reactivateStaffUser(adminIdentifier: string, userId: numbe
 }
 
 export async function updateUserProfile(userId: number, editableFields: Record<string, unknown>) {
-  if (supabaseDb.isSupabaseDataConfigured()) return supabaseDb.updateUserProfile(userId, editableFields);
-  const user = memUsers.find(u => u.id === userId);
-  if (!user) return undefined;
+  if (supabaseDb.isSupabaseDataConfigured()) {
+    try {
+      const updated = await supabaseDb.updateUserProfile(userId, editableFields);
+      if (updated) {
+        const mem = memUsers.find(u => u.id === userId || u.openId === updated.openId);
+        if (mem) {
+          Object.assign(mem, updated, { updatedAt: new Date() });
+        }
+        return updated;
+      }
+    } catch (err) {
+      console.warn("[Database] Supabase updateUserProfile failed, continuing with local store:", err);
+    }
+  }
+  let user = memUsers.find(u => u.id === userId);
+  if (!user) {
+    user = {
+      id: userId,
+      openId: `user-${userId}`,
+      authId: `user-${userId}`,
+      name: "Care Member",
+      email: null,
+      loginMethod: "local",
+      role: "citizen",
+      status: "APPROVED",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      lastSignedIn: new Date(),
+    };
+    memUsers.push(user);
+  }
   
   const forbidden = ["role", "status", "approvedBy", "approvedAt", "rejectionReason", "employeeId", "registrationNumber", "facilityId", "openId", "authId", "id"];
   const updateData: Record<string, unknown> = {};
@@ -1021,6 +1112,10 @@ export async function updateUserProfile(userId: number, editableFields: Record<s
     if (editableFields.bloodGroup !== undefined) memPatients[patientIdx].bloodGroup = editableFields.bloodGroup;
     if (editableFields.allergies !== undefined) memPatients[patientIdx].allergies = editableFields.allergies;
     if (editableFields.conditions !== undefined) memPatients[patientIdx].conditions = editableFields.conditions;
+    if (editableFields.abhaId !== undefined) memPatients[patientIdx].abhaId = editableFields.abhaId;
+    if (editableFields.address !== undefined) memPatients[patientIdx].address = editableFields.address;
+    if (editableFields.pincode !== undefined) memPatients[patientIdx].pincode = editableFields.pincode;
+    memPatients[patientIdx].userId = userId;
     memPatients[patientIdx].updatedAt = new Date();
 
     if (db) {
@@ -1038,9 +1133,40 @@ export async function updateUserProfile(userId: number, editableFields: Record<s
         if (editableFields.bloodGroup !== undefined) patientUpdate.bloodGroup = editableFields.bloodGroup;
         if (editableFields.allergies !== undefined) patientUpdate.allergies = editableFields.allergies;
         if (editableFields.conditions !== undefined) patientUpdate.conditions = editableFields.conditions;
+        if (editableFields.abhaId !== undefined) patientUpdate.abhaId = editableFields.abhaId;
         await db.update(patients).set(patientUpdate as any).where(eq(patients.userId, userId));
       } catch (pErr) {
         console.warn("[Database] MySQL patient profile sync skipped:", pErr);
+      }
+    }
+  } else if (user.role === "citizen" && user.name) {
+    const newPatient = {
+      id: memPatients.length + 1,
+      userId,
+      householdId: 1,
+      name: user.name,
+      age: Number(user.age) || 30,
+      gender: user.gender || "female",
+      contact: user.phone || "+91 98221 00000",
+      village: user.village || "Sundarpur",
+      district: user.district || "Ahmedabad Rural",
+      emergencyContact: user.emergencyContactPhone || user.emergencyContactName || user.phone || "+91 98221 00000",
+      bloodGroup: user.bloodGroup || "B+",
+      allergies: user.allergies || "None",
+      conditions: user.conditions || "None",
+      riskScore: 0,
+      riskCategory: "low",
+      abhaId: user.abhaId || `91-8201-${String(userId).padStart(4, "0")}`,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    memPatients.unshift(newPatient);
+
+    if (db) {
+      try {
+        await db.insert(patients).values(newPatient as any);
+      } catch (pErr) {
+        console.warn("[Database] MySQL patient record insert skipped:", pErr);
       }
     }
   }
