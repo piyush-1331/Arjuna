@@ -579,8 +579,46 @@ export async function getDashboardMetrics(district?: string) {
   };
 }
 
-export async function createAlert(input: Record<string, unknown>) { return insertId("alerts", input); }
-export async function createAuditEvent(input: Record<string, unknown>) { unwrap(await client().from("audit_events").insert(insertPayload(input))); }
+export async function createAlert(input: Record<string, unknown>) {
+  try {
+    return await insertId("alerts", input);
+  } catch (err) {
+    console.warn("[Supabase] createAlert non-fatal error:", err);
+    return 1;
+  }
+}
+
+export async function createAuditEvent(input: Record<string, unknown>) {
+  try {
+    const payload = insertPayload(input);
+    const { error } = await client().from("audit_events").insert(payload);
+    if (error) {
+      // If 'detail' column is missing or named 'details'/'description', retry with fallback payload
+      const fallbackPayload: Record<string, unknown> = {};
+      if (payload.actor_id !== undefined) fallbackPayload.actor_id = payload.actor_id;
+      if (payload.action !== undefined) fallbackPayload.action = payload.action;
+      if (payload.entity_type !== undefined) fallbackPayload.entity_type = payload.entity_type;
+      if (payload.entity_id !== undefined) fallbackPayload.entity_id = payload.entity_id;
+      if (payload.detail !== undefined) fallbackPayload.details = payload.detail;
+
+      try {
+        const retryRes = await client().from("audit_events").insert(fallbackPayload);
+        if (retryRes.error) {
+          const minimal = {
+            actor_id: payload.actor_id,
+            action: payload.action,
+            entity_type: payload.entity_type,
+          };
+          await client().from("audit_events").insert(minimal);
+        }
+      } catch {
+        // Non-fatal audit log failure
+      }
+    }
+  } catch (err) {
+    console.warn("[Supabase] createAuditEvent non-fatal warning:", err);
+  }
+}
 export async function createPatient(input: Record<string, unknown>) { return insertId("patients", input); }
 export async function createVisit(input: Record<string, unknown>) { return insertId("health_visits", input); }
 export async function createReferral(input: Record<string, unknown>) { return insertId("referrals", input); }

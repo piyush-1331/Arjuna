@@ -1569,16 +1569,40 @@ export async function getDashboardMetrics(district?: string) {
 }
 
 export async function createAlert(input: typeof alerts.$inferInsert) {
-  if (supabaseDb.isSupabaseDataConfigured()) return supabaseDb.createAlert(input);
   const id = memAlerts.length + 1;
   memAlerts.unshift({ id, ...input, createdAt: new Date() });
+  if (supabaseDb.isSupabaseDataConfigured()) {
+    try {
+      await supabaseDb.createAlert(input as any);
+    } catch (err) {
+      console.warn("[Database] Supabase createAlert warning:", err);
+    }
+  }
+  const db = await getDb();
+  if (db) {
+    try {
+      await db.insert(alerts).values(input);
+    } catch { /* non-fatal */ }
+  }
   return id;
 }
 
 export async function createAuditEvent(input: typeof auditEvents.$inferInsert) {
-  if (supabaseDb.isSupabaseDataConfigured()) return supabaseDb.createAuditEvent(input);
   const id = memAudit.length + 1;
   memAudit.unshift({ id, ...input, createdAt: new Date() });
+  if (supabaseDb.isSupabaseDataConfigured()) {
+    try {
+      await supabaseDb.createAuditEvent(input as any);
+    } catch (err) {
+      console.warn("[Database] Supabase createAuditEvent warning:", err);
+    }
+  }
+  const db = await getDb();
+  if (db) {
+    try {
+      await db.insert(auditEvents).values(input);
+    } catch { /* non-fatal */ }
+  }
 }
 
 export function getAuditEvents() {

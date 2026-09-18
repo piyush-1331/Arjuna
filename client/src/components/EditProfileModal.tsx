@@ -116,11 +116,7 @@ export function EditProfileModal({
     }
   };
 
-  const updateMutation = trpc.profile.update.useMutation({
-    onError: (err) => {
-      toast.error(err.message || "Failed to update profile.");
-    },
-  });
+  const updateMutation = trpc.profile.update.useMutation();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

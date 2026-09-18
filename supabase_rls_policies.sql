@@ -108,6 +108,10 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS approved_by TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
 
+-- Ensure audit_events columns exist
+ALTER TABLE IF EXISTS public.audit_events ADD COLUMN IF NOT EXISTS detail TEXT;
+ALTER TABLE IF EXISTS public.audit_events ADD COLUMN IF NOT EXISTS details TEXT;
+
 -- -----------------------------------------------------------------------------
 -- 2. Enable Row Level Security (RLS) on all 16 Healthcare Core Tables
 -- -----------------------------------------------------------------------------
