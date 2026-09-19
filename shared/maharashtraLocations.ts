@@ -285,6 +285,66 @@ export function getCitiesForDistrict(districtName: string): string[] {
 }
 
 /**
+ * Centroid GPS Coordinates for all 36 Maharashtra Districts
+ */
+export const MAHARASHTRA_DISTRICT_COORDINATES: Record<string, { lat: number; lng: number }> = {
+  "Ahilyanagar (Ahmednagar)": { lat: 19.0952, lng: 74.7496 },
+  "Akola": { lat: 20.7002, lng: 77.0082 },
+  "Amravati": { lat: 20.9374, lng: 77.7796 },
+  "Beed": { lat: 18.9891, lng: 75.7601 },
+  "Bhandara": { lat: 21.1714, lng: 79.6543 },
+  "Buldhana": { lat: 20.5293, lng: 76.1843 },
+  "Chandrapur": { lat: 19.9615, lng: 79.2961 },
+  "Chhatrapati Sambhajinagar (Aurangabad)": { lat: 19.8762, lng: 75.3433 },
+  "Dharashiv (Osmanabad)": { lat: 18.1861, lng: 76.0419 },
+  "Dhule": { lat: 20.9042, lng: 74.7749 },
+  "Gadchiroli": { lat: 20.1849, lng: 80.0035 },
+  "Gondia": { lat: 21.4554, lng: 80.1961 },
+  "Hingoli": { lat: 19.7196, lng: 77.1472 },
+  "Jalgaon": { lat: 21.0077, lng: 75.5626 },
+  "Jalna": { lat: 19.8410, lng: 75.8864 },
+  "Kolhapur": { lat: 16.7050, lng: 74.2433 },
+  "Latur": { lat: 18.4088, lng: 76.5604 },
+  "Mumbai City": { lat: 18.9388, lng: 72.8354 },
+  "Mumbai Suburban": { lat: 19.0760, lng: 72.8777 },
+  "Nagpur": { lat: 21.1458, lng: 79.0882 },
+  "Nanded": { lat: 19.1383, lng: 77.3210 },
+  "Nandurbar": { lat: 21.3700, lng: 74.2400 },
+  "Nashik": { lat: 19.9975, lng: 73.7898 },
+  "Palghar": { lat: 19.6967, lng: 72.7655 },
+  "Parbhani": { lat: 19.2686, lng: 76.7708 },
+  "Pune": { lat: 18.5204, lng: 73.8567 },
+  "Raigad": { lat: 18.5158, lng: 72.9984 },
+  "Ratnagiri": { lat: 16.9902, lng: 73.3120 },
+  "Sangli": { lat: 16.8524, lng: 74.5815 },
+  "Satara": { lat: 17.6805, lng: 73.9997 },
+  "Sindhudurg": { lat: 16.1158, lng: 73.7088 },
+  "Solapur": { lat: 17.6599, lng: 75.9064 },
+  "Thane": { lat: 19.2183, lng: 72.9781 },
+  "Wardha": { lat: 20.7453, lng: 78.6022 },
+  "Washim": { lat: 20.1110, lng: 77.1352 },
+  "Yavatmal": { lat: 20.3888, lng: 78.1204 },
+};
+
+/**
+ * Returns default GPS coordinates for a Maharashtra district
+ */
+export function getDistrictCoordinates(districtName: string): { lat: number; lng: number } {
+  if (!districtName) return { lat: 21.37, lng: 74.24 }; // default Nandurbar
+  const normalized = districtName.trim().toLowerCase();
+  for (const [dist, coords] of Object.entries(MAHARASHTRA_DISTRICT_COORDINATES)) {
+    if (
+      dist.toLowerCase() === normalized ||
+      dist.toLowerCase().includes(normalized) ||
+      normalized.includes(dist.toLowerCase().split(" ")[0])
+    ) {
+      return coords;
+    }
+  }
+  return { lat: 21.37, lng: 74.24 };
+}
+
+/**
  * Normalizes user-input district name against the official list.
  */
 export function normalizeMaharashtraDistrict(input: string): string {
@@ -297,3 +357,4 @@ export function normalizeMaharashtraDistrict(input: string): string {
   );
   return partial || trimmed;
 }
+

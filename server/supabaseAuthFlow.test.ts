@@ -11,7 +11,7 @@ describe("Supabase authentication flow", () => {
   it("requires a name for registration and normalizes privileged role selection", () => {
     expect(validateSupabaseCredentials({ mode: "register", email: "person@example.com", password: "long-enough-password" })).toContain("full name");
     expect(normalizeRegistrationRole("administrator")).toBe("citizen");
-    expect(buildSupabaseSignUpOptions("  Asha Devi ", "doctor")).toEqual({ data: { full_name: "Asha Devi", selected_role: "doctor" } });
+    expect(buildSupabaseSignUpOptions("  Asha Devi ", "doctor")).toEqual({ data: { full_name: "Asha Devi", selected_role: "doctor", status: "PENDING" } });
   });
 
   it("distinguishes email confirmation from an immediate session", () => {

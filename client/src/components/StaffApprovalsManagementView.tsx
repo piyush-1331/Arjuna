@@ -42,14 +42,30 @@ import {
   FileBadge,
   Sparkles,
   Lock,
+  UserPlus,
 } from "lucide-react";
+import { MAHARASHTRA_DISTRICTS, getCitiesForDistrict } from "@shared/maharashtraLocations";
 
 export function StaffApprovalsManagementView() {
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [roleFilter, setRoleFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // Dialog states for reject and suspend
+  // Dialog states for reject, suspend, and manual staff addition
+  const [addStaffDialogOpen, setAddStaffDialogOpen] = useState<boolean>(false);
+  const [newStaffForm, setNewStaffForm] = useState({
+    name: "",
+    email: "",
+    role: "doctor" as "doctor" | "asha" | "cho" | "facility_staff" | "administrator",
+    phone: "",
+    district: "Nandurbar",
+    assignedVillage: "",
+    employeeId: "",
+    designation: "",
+    facilityName: "",
+    registrationNumber: "",
+  });
+
   const [rejectDialogOpen, setRejectDialogOpen] = useState<boolean>(false);
   const [selectedUserForReject, setSelectedUserForReject] = useState<any | null>(null);
   const [rejectionReason, setRejectionReason] = useState<string>("");
@@ -61,6 +77,29 @@ export function StaffApprovalsManagementView() {
   const utils = trpc.useUtils();
   const usersQuery = trpc.admin.listUsers.useQuery(undefined, {
     refetchOnWindowFocus: true,
+  });
+
+  const createStaffMutation = trpc.admin.createStaffUser.useMutation({
+    onSuccess: (data) => {
+      toast.success(data.message || "Staff member created and approved successfully.");
+      setAddStaffDialogOpen(false);
+      setNewStaffForm({
+        name: "",
+        email: "",
+        role: "doctor",
+        phone: "",
+        district: "Nandurbar",
+        assignedVillage: "",
+        employeeId: "",
+        designation: "",
+        facilityName: "",
+        registrationNumber: "",
+      });
+      utils.admin.listUsers.invalidate();
+    },
+    onError: (err) => {
+      toast.error(err.message || "Failed to create staff member");
+    },
   });
 
   const approveMutation = trpc.admin.approveUser.useMutation({
@@ -368,6 +407,14 @@ export function StaffApprovalsManagementView() {
               >
                 <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${usersQuery.isFetching ? "animate-spin" : ""}`} />
                 Refresh
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => setAddStaffDialogOpen(true)}
+                className="rounded-full text-xs bg-[#15181b] hover:bg-slate-800 text-white font-bold gap-1.5 shadow-sm"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                Add Staff Manually
               </Button>
             </div>
           </div>
@@ -730,6 +777,212 @@ export function StaffApprovalsManagementView() {
               {suspendMutation.isPending ? "Suspending..." : "Suspend Account"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 6. ADD STAFF MEMBER MANUALLY DIALOG */}
+      <Dialog open={addStaffDialogOpen} onOpenChange={setAddStaffDialogOpen}>
+        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white shadow-2xl p-6">
+          <DialogHeader>
+            <div className="w-10 h-10 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-900 mb-2">
+              <UserPlus className="w-5 h-5 text-indigo-600" />
+            </div>
+            <DialogTitle className="text-xl font-bold text-slate-900">
+              Add Healthcare Staff Member Manually
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Provision an authorized doctor, ASHA worker, CHO officer, or facility staff. Manually created accounts are immediately marked <strong>APPROVED</strong>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!newStaffForm.name.trim()) {
+                toast.error("Full name is required.");
+                return;
+              }
+              if (!newStaffForm.email.trim()) {
+                toast.error("Official email is required.");
+                return;
+              }
+              if (!newStaffForm.district.trim()) {
+                toast.error("District selection is required.");
+                return;
+              }
+              if (!newStaffForm.assignedVillage.trim()) {
+                toast.error("City, village or taluka is required.");
+                return;
+              }
+              createStaffMutation.mutate({
+                name: newStaffForm.name.trim(),
+                email: newStaffForm.email.trim(),
+                role: newStaffForm.role,
+                phone: newStaffForm.phone.trim() || "+91 94221 00000",
+                district: newStaffForm.district,
+                assignedVillage: newStaffForm.assignedVillage,
+                village: newStaffForm.assignedVillage,
+                employeeId: newStaffForm.employeeId.trim() || undefined,
+                designation: newStaffForm.designation.trim() || undefined,
+                facilityName: newStaffForm.facilityName.trim() || undefined,
+                registrationNumber: newStaffForm.registrationNumber.trim() || undefined,
+              });
+            }}
+            className="space-y-4 pt-2"
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Healthcare Role *</label>
+                <select
+                  value={newStaffForm.role}
+                  onChange={(e) => setNewStaffForm({ ...newStaffForm, role: e.target.value as any })}
+                  className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold"
+                >
+                  <option value="doctor">Doctor / Medical Officer (MO)</option>
+                  <option value="asha">ASHA Worker</option>
+                  <option value="cho">Community Health Officer (CHO)</option>
+                  <option value="facility_staff">Facility Staff / Pharmacist</option>
+                  <option value="administrator">District Administrator</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Full Name *</label>
+                <Input
+                  required
+                  placeholder="e.g., Dr. Rajesh Deshmukh"
+                  value={newStaffForm.name}
+                  onChange={(e) => setNewStaffForm({ ...newStaffForm, name: e.target.value })}
+                  className="rounded-2xl bg-slate-50 border-slate-200 h-10 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Email Address *</label>
+                <Input
+                  type="email"
+                  required
+                  placeholder="staff@arjuna.gov.in"
+                  value={newStaffForm.email}
+                  onChange={(e) => setNewStaffForm({ ...newStaffForm, email: e.target.value })}
+                  className="rounded-2xl bg-slate-50 border-slate-200 h-10 text-xs"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Mobile Number *</label>
+                <Input
+                  type="tel"
+                  required
+                  placeholder="+91 94221 00000"
+                  value={newStaffForm.phone}
+                  onChange={(e) => setNewStaffForm({ ...newStaffForm, phone: e.target.value })}
+                  className="rounded-2xl bg-slate-50 border-slate-200 h-10 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">District (Maharashtra) *</label>
+                <select
+                  value={newStaffForm.district}
+                  onChange={(e) => setNewStaffForm({ ...newStaffForm, district: e.target.value, assignedVillage: "" })}
+                  className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium focus:bg-white text-slate-900"
+                >
+                  <option value="">Select District</option>
+                  {MAHARASHTRA_DISTRICTS.map((dist) => (
+                    <option key={dist} value={dist}>
+                      {dist}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">City / Village / Taluka *</label>
+                <select
+                  value={newStaffForm.assignedVillage}
+                  onChange={(e) => setNewStaffForm({ ...newStaffForm, assignedVillage: e.target.value })}
+                  className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium focus:bg-white text-slate-900"
+                >
+                  <option value="">{newStaffForm.district ? "Select City / Village / Taluka" : "Select district first"}</option>
+                  {newStaffForm.district && getCitiesForDistrict(newStaffForm.district).map((city) => (
+                    <option key={city} value={city}>
+                      {city}
+                    </option>
+                  ))}
+                  {newStaffForm.assignedVillage && newStaffForm.district && !getCitiesForDistrict(newStaffForm.district).includes(newStaffForm.assignedVillage) && (
+                    <option value={newStaffForm.assignedVillage}>{newStaffForm.assignedVillage}</option>
+                  )}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Employee ID / Worker ID</label>
+                <Input
+                  placeholder="EMP-DOC-102"
+                  value={newStaffForm.employeeId}
+                  onChange={(e) => setNewStaffForm({ ...newStaffForm, employeeId: e.target.value })}
+                  className="rounded-2xl bg-slate-50 border-slate-200 h-10 text-xs"
+                />
+              </div>
+
+              {newStaffForm.role === "doctor" ? (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700">Medical Reg. Number *</label>
+                  <Input
+                    placeholder="MMC/2018/12345"
+                    value={newStaffForm.registrationNumber}
+                    onChange={(e) => setNewStaffForm({ ...newStaffForm, registrationNumber: e.target.value })}
+                    className="rounded-2xl bg-slate-50 border-slate-200 h-10 text-xs"
+                  />
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700">Designation</label>
+                  <Input
+                    placeholder="e.g. ASHA Facilitator / Pharmacist"
+                    value={newStaffForm.designation}
+                    onChange={(e) => setNewStaffForm({ ...newStaffForm, designation: e.target.value })}
+                    className="rounded-2xl bg-slate-50 border-slate-200 h-10 text-xs"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700">Assigned Facility / Hospital Name</label>
+              <Input
+                placeholder="e.g. Shahada Community Health Centre (CHC)"
+                value={newStaffForm.facilityName}
+                onChange={(e) => setNewStaffForm({ ...newStaffForm, facilityName: e.target.value })}
+                className="rounded-2xl bg-slate-50 border-slate-200 h-10 text-xs"
+              />
+            </div>
+
+            <DialogFooter className="pt-2 gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAddStaffDialogOpen(false)}
+                className="rounded-2xl text-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={createStaffMutation.isPending}
+                className="rounded-2xl text-xs font-bold bg-[#15181b] hover:bg-slate-800 text-white shadow-md"
+              >
+                {createStaffMutation.isPending ? "Creating & Approving..." : "Add & Approve Staff"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

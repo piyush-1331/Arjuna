@@ -238,7 +238,7 @@ export function EditProfileModal({
       ]);
 
       refresh();
-      toast.success("Profile saved and updated across all dashboards!");
+      toast.success("Profile Saved");
       onOpenChange(false);
       onSuccess?.();
     } catch (err: any) {

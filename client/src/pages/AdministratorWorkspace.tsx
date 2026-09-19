@@ -23,6 +23,7 @@ import {
   Legend as RechartsLegend,
 } from "recharts";
 import { StaffApprovalsManagementView } from "@/components/StaffApprovalsManagementView";
+import { FacilitiesManagementView } from "@/components/FacilitiesManagementView";
 import {
   Activity,
   AlertCircle,
@@ -76,6 +77,7 @@ export default function AdministratorWorkspace() {
   const followUps = trpc.followUps.list.useQuery(undefined, { enabled: isAuthenticated });
   const notifsQuery = trpc.notifications.list.useQuery(undefined, { enabled: isAuthenticated, staleTime: 10000 });
   const usersQuery = trpc.admin.listUsers.useQuery(undefined, { enabled: isAuthenticated, staleTime: 15000 });
+  const facilitiesQuery = trpc.facilities.list.useQuery(undefined, { enabled: isAuthenticated, staleTime: 15000 });
   const districtForecastQuery = trpc.demandForecasting.getDistrictForecasts.useQuery(
     { district: "Ahmedabad Rural" },
     { enabled: isAuthenticated, staleTime: 30000 }
@@ -105,6 +107,7 @@ export default function AdministratorWorkspace() {
   const navItems: NavItem[] = [
     { id: "command_center", label: "Command Center", icon: Activity },
     { id: "staff_approvals", label: "Staff Approvals & Users", icon: UserCheck, badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : undefined },
+    { id: "facilities", label: "Facilities & GIS Map", icon: Hospital, badge: facilitiesQuery.data?.length || undefined },
     { id: "notifications", label: "Notification Center", icon: Bell, badge: notifsQuery.data?.unreadCount || undefined },
     { id: "village_accessibility", label: "Village Accessibility Scores", icon: Activity },
     { id: "patients", label: "District Patients", icon: Users, badge: allPatients.length },
@@ -128,6 +131,8 @@ export default function AdministratorWorkspace() {
           ? "District Health Command Center"
           : activeTab === "staff_approvals"
           ? "Staff Registration Approvals & Role Governance"
+          : activeTab === "facilities"
+          ? "Healthcare Facilities & Hospital GIS Registry"
           : activeTab === "notifications"
           ? "Multi-Channel Notification Center & History"
           : activeTab === "village_accessibility"
@@ -148,7 +153,7 @@ export default function AdministratorWorkspace() {
           ? "District Campaign Planning & Beneficiary Oversight"
           : "AI Epidemiological Anomaly Signals"
       }
-      subtitle={user?.name ? `Government of Gujarat · Health & Family Welfare · ${user.name} (${user.district || "Ahmedabad Rural"} Administrator)` : "Government of Gujarat · Health & Family Welfare Department · Ahmedabad Rural District"}
+      subtitle={user?.name ? `Government of Maharashtra · Health & Family Welfare · ${user.name} (${user.district || "Nandurbar"} Administrator)` : "Government of Maharashtra · Health & Family Welfare Department · District Command Unit"}
       actions={
         activeTab === "command_center" ? (
           <Button onClick={() => toast.success("District Health Digest Report downloaded")} variant="outline" className="rounded-full bg-white text-xs font-semibold">
@@ -165,6 +170,11 @@ export default function AdministratorWorkspace() {
       {/* STAFF APPROVALS & USER MANAGEMENT VIEW */}
       {activeTab === "staff_approvals" && (
         <StaffApprovalsManagementView />
+      )}
+
+      {/* HEALTHCARE FACILITIES & GIS MAP VIEW */}
+      {activeTab === "facilities" && (
+        <FacilitiesManagementView />
       )}
 
       {/* 2. DISTRICT PATIENTS VIEW */}

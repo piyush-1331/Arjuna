@@ -48,7 +48,7 @@ export const users = mysqlTable("users", {
 export const facilities = mysqlTable("facilities", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 180 }).notNull(),
-  facilityType: mysqlEnum("facilityType", ["aam", "sub_centre", "phc", "chc", "district_hospital", "specialist"]).notNull(),
+  facilityType: mysqlEnum("facilityType", ["aam", "sub_centre", "phc", "chc", "sub_district_hospital", "district_hospital", "specialist"]).notNull(),
   district: varchar("district", { length: 120 }).notNull(),
   village: varchar("village", { length: 120 }),
   address: text("address"),

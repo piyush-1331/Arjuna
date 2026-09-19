@@ -26,7 +26,7 @@ function deriveUserFromSession(session: any) {
     email: u.email ?? null,
     loginMethod: "supabase",
     role,
-    status: (meta.status || "APPROVED").toUpperCase(),
+    status: (meta.status || (role === "citizen" || role === "admin" || role === "administrator" ? "APPROVED" : "PENDING")).toUpperCase(),
     phone: meta.phone ?? null,
     dateOfBirth: meta.date_of_birth ?? null,
     age: meta.age != null && !isNaN(Number(meta.age)) ? Number(meta.age) : null,

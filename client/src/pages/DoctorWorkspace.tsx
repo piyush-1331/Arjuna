@@ -349,7 +349,7 @@ export default function DoctorWorkspace() {
           ? "Digital Prescription Registry"
           : "Field Follow-up Directives"
       }
-      subtitle={`${user?.facilityName || "Sundarpur Primary Health Centre & Sanand CHC Network"} · ${user?.name ? (user.name.startsWith("Dr.") ? user.name : `Dr. ${user.name}`) : "Dr. Sanjay Trivedi"} (${user?.designation || "Medical Officer"})`}
+      subtitle={`${user?.facilityName || "Primary Health Centre & Sub-District Network"} · ${user?.district || "Nandurbar"} · ${user?.name ? (user.name.startsWith("Dr.") ? user.name : `Dr. ${user.name}`) : "Dr. Sanjay Trivedi"} (${user?.designation || "Medical Officer"})`}
       actions={
         activeTab === "prescriptions" ? (
           <Button onClick={() => setShowAddPrescription(true)} className="rounded-full bg-[#15181b] text-white">

@@ -106,6 +106,22 @@ export default function WorkspaceLayout({
     await triggerSync();
   };
 
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      const r = (user.role || "").toLowerCase();
+      const s = (user.status || "APPROVED").toUpperCase();
+      if (r !== "citizen" && r !== "admin" && r !== "administrator") {
+        if (s === "PENDING") {
+          setLocation("/pending-approval");
+        } else if (s === "REJECTED") {
+          setLocation("/registration-rejected");
+        } else if (s === "SUSPENDED") {
+          setLocation("/account-suspended");
+        }
+      }
+    }
+  }, [isAuthenticated, user, setLocation]);
+
   if (loading) {
     return (
       <div className="min-h-screen grid place-items-center bg-[#f3f5f8] dark:bg-[#0b0f14]">
@@ -119,6 +135,28 @@ export default function WorkspaceLayout({
 
   if (!isAuthenticated) {
     return <SupabaseAuthPortal />;
+  }
+
+  // Guard against unapproved staff accessing clinical dashboard
+  if (
+    user &&
+    user.role !== "citizen" &&
+    user.role !== "admin" &&
+    user.role !== "administrator" &&
+    (user.status || "").toUpperCase() === "PENDING"
+  ) {
+    return (
+      <div className="min-h-screen grid place-items-center bg-[#f3f5f8] dark:bg-[#0b0f14] p-4">
+        <div className="flex flex-col items-center gap-4 text-center max-w-md">
+          <RefreshCw className="h-8 w-8 animate-spin text-amber-600" />
+          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Verification In Progress</h2>
+          <p className="text-xs text-slate-500">Your healthcare staff registration is pending administrator approval. Redirecting...</p>
+          <Button onClick={() => setLocation("/pending-approval")} className="rounded-xl text-xs font-bold bg-[#15181b] text-white">
+            View Application Status
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (

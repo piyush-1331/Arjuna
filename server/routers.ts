@@ -74,6 +74,8 @@ import {
   rejectStaffUser,
   suspendStaffUser,
   reactivateStaffUser,
+  createFacility,
+  createStaffUser,
   updateUserProfile,
   resetDemoEnvironment,
 } from "./db";
@@ -492,7 +494,24 @@ export const appRouter = router({
     }),
   }),
   patients: router({
-    list: protectedProcedure.input(z.object({ limit: z.number().int().min(1).max(100).default(50) }).optional()).query(({ input, ctx }) => getPatientsForUser(ctx.user.id, ctx.user.role, input?.limit ?? 50)),
+    list: protectedProcedure
+      .input(
+        z
+          .object({
+            limit: z.number().int().min(1).max(100).default(50),
+            district: z.string().optional(),
+            village: z.string().optional(),
+          })
+          .optional()
+      )
+      .query(({ input, ctx }) => {
+        const targetDistrict = input?.district || ctx.user.district || undefined;
+        const targetVillage =
+          ctx.user.role === "asha" || ctx.user.role === "cho"
+            ? input?.village || ctx.user.assignedVillage || ctx.user.village || undefined
+            : input?.village || undefined;
+        return getPatientsForUser(ctx.user.id, ctx.user.role, input?.limit ?? 50, targetDistrict, targetVillage);
+      }),
     get: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(({ input, ctx }) => assertPatientAccess(input.id, ctx.user.id, ctx.user.role)),
     timeline: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ input, ctx }) => {
       await assertPatientAccess(input.id, ctx.user.id, ctx.user.role);
@@ -2331,6 +2350,51 @@ export const appRouter = router({
       }),
   }),
   facilities: router({
+    create: protectedProcedure
+      .input(
+        z.object({
+          name: z.string().min(2, "Facility name is required"),
+          facilityType: z.enum(["sub_centre", "phc", "chc", "sub_district_hospital", "district_hospital", "specialist"]),
+          district: z.string().min(1, "District is required"),
+          village: z.string().optional(),
+          address: z.string().optional(),
+          phone: z.string().optional(),
+          latitude: z.number().min(-90).max(90),
+          longitude: z.number().min(-180).max(180),
+          specialties: z.array(z.string()).optional(),
+          capabilities: z.array(z.string()).optional(),
+          totalBeds: z.number().int().min(0).optional(),
+          availableBeds: z.number().int().min(0).optional(),
+          icuAvailable: z.boolean().optional(),
+          oxygenAvailable: z.boolean().optional(),
+          is24x7: z.boolean().optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        if (!hasRole(ctx.user.role, "administrator", "admin", "facility_staff")) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Only district health administrators and facility managers can register new health facilities.",
+          });
+        }
+
+        const facility = await createFacility(input);
+
+        await createAuditEvent({
+          actorId: ctx.user.id,
+          action: "FACILITY_CREATED",
+          entityType: "facility",
+          entityId: facility.id,
+          detail: `Health facility "${input.name}" (${input.facilityType}) created in ${input.village ? `${input.village}, ` : ""}${input.district} at GPS [${input.latitude}, ${input.longitude}] by ${ctx.user.name || `User #${ctx.user.id}`}`,
+        });
+
+        return {
+          success: true,
+          facility,
+          message: `Health facility "${input.name}" registered successfully.`,
+        };
+      }),
+
     list: protectedProcedure
       .input(z.object({ district: z.string().optional() }).optional())
       .query(async ({ input }) => {
@@ -3421,6 +3485,53 @@ export const appRouter = router({
   }),
 
   admin: router({
+    createStaffUser: adminProcedure
+      .input(
+        z.object({
+          name: z.string().min(2, "Name is required"),
+          email: z.string().email("Valid email is required"),
+          role: z.enum(["doctor", "asha", "cho", "facility_staff", "administrator", "admin"]),
+          phone: z.string().min(6, "Valid phone number is required"),
+          district: z.string().min(1, "District is required"),
+          village: z.string().optional(),
+          assignedVillage: z.string().optional(),
+          employeeId: z.string().optional(),
+          designation: z.string().optional(),
+          facilityId: z.number().optional(),
+          facilityName: z.string().optional(),
+          registrationNumber: z.string().optional(),
+          password: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const newUser = await createStaffUser(input);
+
+        await createAuditEvent({
+          actorId: ctx.user.id,
+          action: "STAFF_CREATED_MANUALLY",
+          entityType: "profile",
+          entityId: newUser.id,
+          detail: `Staff member ${input.name} (${input.role}) in ${input.district} registered manually and auto-approved by admin #${ctx.user.id}`,
+        });
+
+        await dispatchNotification({
+          eventType: "account_status",
+          recipientId: newUser.id,
+          recipientName: input.name,
+          recipientEmail: input.email,
+          recipientPhone: input.phone,
+          title: "Account Created & Approved",
+          message: `Your healthcare staff account (${input.role.toUpperCase()}) has been provisioned and approved by the district health administrator.`,
+          priority: "routine",
+        });
+
+        return {
+          success: true,
+          user: newUser,
+          message: `Staff member "${input.name}" created and approved successfully.`,
+        };
+      }),
+
     listUsers: adminProcedure
       .input(
         z

@@ -505,7 +505,31 @@ export async function updateUserProfile(userId: number, editableFields: Record<s
 }
 
 export async function getPatients(limit = 50) { return many(unwrap(await client().from("patients").select("*").order("updated_at", { ascending: false }).limit(limit))).map(mapPatient); }
-export async function getPatientsForUser(userId: number, role: string, limit = 50) { const query = client().from("patients").select("*").order("updated_at", { ascending: false }).limit(limit); const result = ["asha", "cho", "asha_cho", "doctor", "facility_staff", "administrator", "admin"].includes(role) ? await query : await query.eq("user_id", userId); return many(unwrap(result)).map(mapPatient); }
+export async function getPatientsForUser(userId: number, role: string, limit = 50, targetDistrict?: string, targetVillage?: string) {
+  let query = client().from("patients").select("*").order("updated_at", { ascending: false }).limit(limit);
+  if (["asha", "cho", "asha_cho", "doctor", "facility_staff", "administrator", "admin"].includes(role)) {
+    if (targetDistrict) {
+      query = query.ilike("district", `%${targetDistrict}%`);
+    }
+    if (targetVillage) {
+      query = query.ilike("village", `%${targetVillage}%`);
+    }
+  } else {
+    query = query.eq("user_id", userId);
+  }
+  const result = await query;
+  const list = many(unwrap(result)).map(mapPatient);
+  // Fallback to all if district filter yielded 0 for demo accounts
+  if (list.length === 0 && ["doctor", "administrator", "admin", "facility_staff"].includes(role) && targetDistrict) {
+    const fallbackRes = await client().from("patients").select("*").order("updated_at", { ascending: false }).limit(limit);
+    return many(unwrap(fallbackRes)).map(mapPatient);
+  }
+  return list;
+}
+
+export async function createFacility(input: Record<string, unknown>) {
+  return insertId("facilities", input);
+}
 
 export async function markOverdueFollowUps() {
   const now = new Date().toISOString();

@@ -1043,6 +1043,72 @@ export async function reactivateStaffUser(adminIdentifier: string, userId: numbe
   }
 }
 
+export async function createStaffUser(input: {
+  name: string;
+  email: string;
+  role: "doctor" | "asha" | "cho" | "facility_staff" | "administrator" | "admin";
+  phone: string;
+  district: string;
+  village?: string;
+  assignedVillage?: string;
+  employeeId?: string;
+  designation?: string;
+  facilityId?: number;
+  facilityName?: string;
+  registrationNumber?: string;
+  password?: string;
+}) {
+  const id = memUsers.length + 101;
+  const openId = `admin-staff-${Date.now()}-${id}`;
+  const now = new Date();
+  const newUser = {
+    id,
+    openId,
+    authId: openId,
+    name: input.name.trim(),
+    email: input.email.trim(),
+    loginMethod: "manual_admin",
+    role: input.role,
+    status: "APPROVED",
+    phone: input.phone.trim(),
+    district: input.district,
+    village: input.assignedVillage || input.village || "",
+    assignedVillage: input.assignedVillage || input.village || "",
+    employeeId: input.employeeId?.trim() || `EMP-ADM-${id}`,
+    designation: input.designation?.trim() || (input.role === "doctor" ? "Medical Officer" : input.role === "asha" ? "ASHA Facilitator" : input.role === "cho" ? "Community Health Officer" : "Healthcare Staff"),
+    facilityId: input.facilityId || 1,
+    facilityName: input.facilityName?.trim() || "District Health Centre",
+    registrationNumber: input.registrationNumber?.trim() || null,
+    approvalRequestedAt: now,
+    approvedAt: now,
+    approvedBy: "Administrator",
+    createdAt: now,
+    updatedAt: now,
+    lastSignedIn: now,
+  };
+
+  memUsers.unshift(newUser as any);
+
+  if (supabaseDb.isSupabaseDataConfigured()) {
+    try {
+      await supabaseDb.upsertUser(newUser);
+    } catch (e) {
+      console.warn("[Database] Supabase createStaffUser warning:", e);
+    }
+  }
+
+  const db = await getDb();
+  if (db) {
+    try {
+      await db.insert(users).values(newUser as any);
+    } catch (e) {
+      console.warn("[Database] MySQL createStaffUser warning:", e);
+    }
+  }
+
+  return newUser;
+}
+
 export async function updateUserProfile(userId: number, editableFields: Record<string, unknown>) {
   if (supabaseDb.isSupabaseDataConfigured()) {
     try {
@@ -1186,14 +1252,23 @@ export async function getPatients(limit = 50) {
   return [...memPatients].slice(0, limit);
 }
 
-export async function getPatientsForUser(userId: number, role: string, limit = 50) {
-  if (supabaseDb.isSupabaseDataConfigured()) return supabaseDb.getPatientsForUser(userId, role, limit);
+export async function getPatientsForUser(userId: number, role: string, limit = 50, targetDistrict?: string, targetVillage?: string) {
+  if (supabaseDb.isSupabaseDataConfigured()) return supabaseDb.getPatientsForUser(userId, role, limit, targetDistrict, targetVillage);
   const db = await getDb();
   if (db) {
     try {
       if (["asha", "cho", "asha_cho", "doctor", "facility_staff", "administrator", "admin"].includes(role)) {
         const rows = await db.select().from(patients).orderBy(desc(patients.updatedAt)).limit(limit);
-        if (rows.length) return rows;
+        if (rows.length) {
+          let filtered = rows;
+          if (targetDistrict) {
+            filtered = filtered.filter(p => p.district?.toLowerCase().includes(targetDistrict.toLowerCase()) || targetDistrict.toLowerCase().includes(p.district?.toLowerCase() || ""));
+          }
+          if (targetVillage) {
+            filtered = filtered.filter(p => p.village?.toLowerCase().includes(targetVillage.toLowerCase()) || targetVillage.toLowerCase().includes(p.village?.toLowerCase() || ""));
+          }
+          if (filtered.length) return filtered.slice(0, limit);
+        }
       } else {
         const rows = await db.select().from(patients).where(eq(patients.userId, userId)).orderBy(desc(patients.updatedAt)).limit(limit);
         if (rows.length) return rows;
@@ -1201,7 +1276,18 @@ export async function getPatientsForUser(userId: number, role: string, limit = 5
     } catch { /* fallback to memory store */ }
   }
   if (["asha", "cho", "asha_cho", "doctor", "facility_staff", "administrator", "admin"].includes(role)) {
-    return [...memPatients].slice(0, limit);
+    let filtered = [...memPatients];
+    if (targetDistrict) {
+      filtered = filtered.filter(p => p.district?.toLowerCase().includes(targetDistrict.toLowerCase()) || targetDistrict.toLowerCase().includes(p.district?.toLowerCase() || ""));
+    }
+    if (targetVillage) {
+      filtered = filtered.filter(p => p.village?.toLowerCase().includes(targetVillage.toLowerCase()) || targetVillage.toLowerCase().includes(p.village?.toLowerCase() || ""));
+    }
+    if (filtered.length === 0 && targetDistrict) {
+      filtered = memPatients.filter(p => p.district?.toLowerCase().includes(targetDistrict.toLowerCase()) || targetDistrict.toLowerCase().includes(p.district?.toLowerCase() || ""));
+      if (filtered.length === 0) filtered = [...memPatients];
+    }
+    return filtered.slice(0, limit);
   }
   const userPatients = memPatients.filter(p => p.userId === userId);
   return userPatients;
@@ -1492,6 +1578,78 @@ export async function getFacilities(district?: string) {
       telemetry: meta?.telemetry,
     };
   });
+}
+
+export async function createFacility(input: {
+  name: string;
+  facilityType: "sub_centre" | "phc" | "chc" | "sub_district_hospital" | "district_hospital" | "specialist";
+  district: string;
+  village?: string;
+  address?: string;
+  phone?: string;
+  latitude?: number;
+  longitude?: number;
+  specialties?: string[];
+  capabilities?: string[];
+  totalBeds?: number;
+  availableBeds?: number;
+  icuAvailable?: boolean;
+  oxygenAvailable?: boolean;
+  is24x7?: boolean;
+}) {
+  const id = memFacilities.length + 101;
+  const newFac = {
+    id,
+    name: input.name,
+    facilityType: input.facilityType,
+    district: input.district,
+    village: input.village || "",
+    address: input.address || `${input.village ? `${input.village}, ` : ""}${input.district}, Maharashtra`,
+    phone: input.phone || "+91 22 2000 0000",
+    latitude: input.latitude ? Number(input.latitude) : 19.0760,
+    longitude: input.longitude ? Number(input.longitude) : 72.8777,
+    specialties: input.specialties || ["General Medicine", "Emergency Medicine"],
+    capabilities: input.capabilities || ["24/7 Emergency", "OPD", "Pharmacy"],
+    emergencyCapability: {
+      is24x7: input.is24x7 ?? true,
+      icuAvailable: input.icuAvailable ?? false,
+      oxygenAvailable: input.oxygenAvailable ?? true,
+      totalBeds: input.totalBeds ?? 25,
+      availableBeds: input.availableBeds ?? 12,
+    },
+    createdAt: new Date(),
+  };
+
+  memFacilities.unshift(newFac as any);
+  SMART_FACILITIES_REGISTRY.unshift(newFac as any);
+
+  if (supabaseDb.isSupabaseDataConfigured()) {
+    try {
+      await supabaseDb.createFacility(input);
+    } catch (e) {
+      console.warn("[Database] Supabase createFacility warning:", e);
+    }
+  }
+
+  const db = await getDb();
+  if (db) {
+    try {
+      await db.insert(facilities).values({
+        name: input.name,
+        facilityType: input.facilityType,
+        district: input.district,
+        village: input.village,
+        address: input.address,
+        phone: input.phone,
+        latitude: input.latitude ? String(input.latitude) : null,
+        longitude: input.longitude ? String(input.longitude) : null,
+      });
+    } catch (e) {
+      console.warn("[Database] MySQL createFacility warning:", e);
+    }
+  }
+
+  return newFac;
 }
 
 export function computeMedicineStatus(med: {

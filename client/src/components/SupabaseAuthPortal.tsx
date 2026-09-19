@@ -189,6 +189,10 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
       toast.error("Please select your district.");
       return;
     }
+    if (!assignedVillage) {
+      toast.error("Please select your assigned city, village or taluka.");
+      return;
+    }
     const err = validateSupabaseCredentials({
       mode: "staff_register",
       fullName: fullName.trim(),
@@ -681,23 +685,52 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-slate-700">District (Maharashtra) *</Label>
-                  <select
-                    value={district}
-                    onChange={(e) => {
-                      setDistrict(e.target.value);
-                      setAssignedVillage("");
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-slate-700">District (Maharashtra) *</Label>
+                    <select
+                      value={district}
+                      onChange={(e) => {
+                        setDistrict(e.target.value);
+                        setAssignedVillage("");
+                      }}
+                      className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium focus:bg-white text-slate-900"
+                    >
+                      <option value="">Select District</option>
+                      {MAHARASHTRA_DISTRICTS.map((dist) => (
+                        <option key={dist} value={dist}>
+                          {dist}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div
+                    className="space-y-1.5 relative cursor-pointer"
+                    onClickCapture={(e) => {
+                      if (!district) {
+                        e.stopPropagation();
+                        toast.error("Please select a district first");
+                      }
                     }}
-                    className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium focus:bg-white text-slate-900"
                   >
-                    <option value="">Select District</option>
-                    {MAHARASHTRA_DISTRICTS.map((dist) => (
-                      <option key={dist} value={dist}>
-                        {dist}
-                      </option>
-                    ))}
-                  </select>
+                    <Label className="text-xs font-bold text-slate-700">Assigned City / Village / Taluka *</Label>
+                    <select
+                      value={assignedVillage}
+                      disabled={!district}
+                      onChange={(e) => setAssignedVillage(e.target.value)}
+                      className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed text-slate-900"
+                    >
+                      <option value="">{district ? "Select City / Village / Taluka" : "Please select district first"}</option>
+                      {district && getCitiesForDistrict(district).map((city) => (
+                        <option key={city} value={city}>
+                          {city}
+                        </option>
+                      ))}
+                      {assignedVillage && district && !getCitiesForDistrict(district).includes(assignedVillage) && (
+                        <option value={assignedVillage}>{assignedVillage}</option>
+                      )}
+                    </select>
+                  </div>
                 </div>
 
                 {/* Role Specific Dynamic Fields */}
@@ -736,32 +769,14 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
                         className="rounded-2xl bg-slate-50 border-slate-200 h-10 text-xs"
                       />
                     </div>
-                    <div
-                      className="space-y-1.5 relative cursor-pointer"
-                      onClickCapture={(e) => {
-                        if (!district) {
-                          e.stopPropagation();
-                          toast.error("Please select a district first");
-                        }
-                      }}
-                    >
-                      <Label className="text-xs font-bold text-slate-700">Assigned Village *</Label>
-                      <select
-                        value={assignedVillage}
-                        disabled={!district}
-                        onChange={(e) => setAssignedVillage(e.target.value)}
-                        className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed text-slate-900"
-                      >
-                        <option value="">{district ? "Select Assigned Village / Taluka" : "Please select district first"}</option>
-                        {district && getCitiesForDistrict(district).map((city) => (
-                          <option key={city} value={city}>
-                            {city}
-                          </option>
-                        ))}
-                        {assignedVillage && district && !getCitiesForDistrict(district).includes(assignedVillage) && (
-                          <option value={assignedVillage}>{assignedVillage}</option>
-                        )}
-                      </select>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-bold text-slate-700">Designation / Role</Label>
+                      <Input
+                        placeholder="ASHA Facilitator"
+                        value={designation}
+                        onChange={(e) => setDesignation(e.target.value)}
+                        className="rounded-2xl bg-slate-50 border-slate-200 h-10 text-xs"
+                      />
                     </div>
                   </div>
                 )}

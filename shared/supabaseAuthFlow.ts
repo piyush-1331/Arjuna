@@ -90,8 +90,16 @@ export function validateStaffRegistrationInputs(input: {
     errors.push("Please select a valid healthcare role (ASHA, CHO, Doctor, or Facility Staff).");
   }
 
-  if (!input.facilityName?.trim() && !input.assignedVillage?.trim()) {
+  if (!input.facilityName?.trim()) {
     errors.push("Facility Name or Primary Health Centre is required for healthcare staff.");
+  }
+
+  if (!input.district?.trim()) {
+    errors.push("District selection is compulsory.");
+  }
+
+  if (!input.assignedVillage?.trim() && !input.facilityName?.trim()) {
+    errors.push("City or village selection is compulsory.");
   }
 
   return {
@@ -135,6 +143,12 @@ export function validateSupabaseCredentials(input: AuthValidationInput): string 
     if (!input.phone?.trim()) {
       return "Mobile number is required for healthcare staff registration.";
     }
+    if (!input.district?.trim()) {
+      return "District selection is compulsory for healthcare staff registration.";
+    }
+    if (!input.assignedVillage?.trim()) {
+      return "City or village selection is compulsory for healthcare staff registration.";
+    }
     if (input.role === "doctor" && !input.registrationNumber?.trim()) {
       return "Doctor registration number is required.";
     }
@@ -155,21 +169,30 @@ export function buildSupabaseSignUpOptions(
   fullNameOrMetadata: string | Record<string, unknown>,
   roleOrAdditional?: string | Record<string, unknown>,
   additionalMetadata?: Record<string, unknown>
-): { data: { full_name?: string; selected_role?: UserRole; [key: string]: any } } {
+): { data: { full_name?: string; selected_role?: UserRole; status?: AccountStatus; [key: string]: any } } {
   if (typeof fullNameOrMetadata === "string") {
     const role = typeof roleOrAdditional === "string" ? roleOrAdditional : "citizen";
     const extra = typeof roleOrAdditional === "object" ? roleOrAdditional : (additionalMetadata || {});
+    const normalizedRole = normalizeRegistrationRole(role);
+    const isStaff = HEALTHCARE_STAFF_ROLES.includes(normalizedRole as HealthcareStaffRole);
     return {
       data: {
         full_name: fullNameOrMetadata.trim(),
-        selected_role: normalizeRegistrationRole(role),
+        selected_role: normalizedRole,
+        status: isStaff ? "PENDING" : "APPROVED",
         ...extra,
       },
     };
   }
 
+  const role = (fullNameOrMetadata as any).selected_role || (fullNameOrMetadata as any).role || "citizen";
+  const normalizedRole = normalizeRegistrationRole(role);
+  const isStaff = HEALTHCARE_STAFF_ROLES.includes(normalizedRole as HealthcareStaffRole);
+  const initialStatus = (fullNameOrMetadata as any).status || (isStaff ? "PENDING" : "APPROVED");
+
   return {
     data: {
+      status: initialStatus,
       ...fullNameOrMetadata,
     },
   };

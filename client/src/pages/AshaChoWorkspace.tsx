@@ -52,6 +52,10 @@ import {
 import CommunityScreeningDesk from "@/components/CommunityScreeningDesk";
 import HealthcareFacilityMap from "@/components/HealthcareFacilityMap";
 import { VillageAccessibilityDashboard } from "@/components/VillageAccessibilityDashboard";
+import {
+  MAHARASHTRA_DISTRICTS,
+  getCitiesForDistrict,
+} from "@shared/maharashtraLocations";
 
 export default function AshaChoWorkspace() {
   const { user, isAuthenticated } = useAuth();
@@ -123,10 +127,13 @@ export default function AshaChoWorkspace() {
   }, [refreshLocalData, offlineQueue.length, isSyncing]);
 
   // Forms
+  const userDistrict = user?.district || "Nandurbar";
+  const userVillage = user?.assignedVillage || "Dhadgaon";
+
   const [householdForm, setHouseholdForm] = useState({
     headName: "",
-    village: "Sundarpur",
-    district: "Ahmedabad Rural",
+    village: userVillage,
+    district: userDistrict,
     contact: "",
   });
 
@@ -135,8 +142,8 @@ export default function AshaChoWorkspace() {
     age: "",
     gender: "female" as "female" | "male" | "other" | "undisclosed",
     contact: "",
-    village: "Sundarpur",
-    district: "Ahmedabad Rural",
+    village: userVillage,
+    district: userDistrict,
     emergencyContact: "",
     bloodGroup: "B+",
     allergies: "",
@@ -150,14 +157,27 @@ export default function AshaChoWorkspace() {
     age: "",
     gender: "female" as "female" | "male" | "other" | "undisclosed",
     contact: "",
-    village: "Sundarpur",
-    district: "Ahmedabad Rural",
+    village: userVillage,
+    district: userDistrict,
     emergencyContact: "",
     bloodGroup: "B+",
     allergies: "",
     conditions: "",
     householdId: undefined as number | undefined,
   });
+
+  // Dynamic city/village dropdown options for each modal
+  const availableHouseholdCities = useMemo(() => {
+    return getCitiesForDistrict(householdForm.district);
+  }, [householdForm.district]);
+
+  const availablePatientCities = useMemo(() => {
+    return getCitiesForDistrict(patientForm.district);
+  }, [patientForm.district]);
+
+  const availableEditPatientCities = useMemo(() => {
+    return getCitiesForDistrict(editPatientForm.district);
+  }, [editPatientForm.district]);
 
   const [referralForm, setReferralForm] = useState({
     patientId: 1 as number | string,
@@ -237,7 +257,7 @@ export default function AshaChoWorkspace() {
     onSuccess: () => {
       toast.success("Household registered successfully in village records");
       setShowAddHousehold(false);
-      setHouseholdForm({ headName: "", village: "Sundarpur", district: "Ahmedabad Rural", contact: "" });
+      setHouseholdForm({ headName: "", village: userVillage, district: userDistrict, contact: "" });
       utils.households.list.invalidate();
     },
     onError: (err) => toast.error(err.message),
@@ -252,8 +272,8 @@ export default function AshaChoWorkspace() {
         age: "",
         gender: "female",
         contact: "",
-        village: "Sundarpur",
-        district: "Ahmedabad Rural",
+        village: userVillage,
+        district: userDistrict,
         emergencyContact: "",
         bloodGroup: "B+",
         allergies: "",
@@ -316,7 +336,6 @@ export default function AshaChoWorkspace() {
     onError: (err) => toast.error(err.message),
   });
 
-
   const openPatientProfileModal = (patientId: number | string) => {
     setSelectedPatientId(patientId);
     setShowPatientProfile(true);
@@ -329,8 +348,8 @@ export default function AshaChoWorkspace() {
       age: String(patient.age),
       gender: patient.gender || "female",
       contact: patient.contact || "",
-      village: patient.village || "Sundarpur",
-      district: patient.district || "Ahmedabad Rural",
+      village: patient.village || userVillage,
+      district: patient.district || userDistrict,
       emergencyContact: patient.emergencyContact || "",
       bloodGroup: patient.bloodGroup || "B+",
       allergies: patient.allergies || "",
@@ -347,9 +366,9 @@ export default function AshaChoWorkspace() {
       gender: "female",
       contact: "",
       village: householdId
-        ? allHouseholds.find((h) => String(h.id) === String(householdId))?.village || "Sundarpur"
-        : "Sundarpur",
-      district: "Ahmedabad Rural",
+        ? allHouseholds.find((h) => String(h.id) === String(householdId))?.village || userVillage
+        : userVillage,
+      district: userDistrict,
       emergencyContact: "",
       bloodGroup: "B+",
       allergies: "",
@@ -441,7 +460,7 @@ export default function AshaChoWorkspace() {
     <WorkspaceLayout
       role="asha_cho"
       title="ASHA / CHO Village Command Hub"
-      subtitle={user?.name ? `${user.name} (${user.role === "cho" ? "Community Health Officer" : "ASHA Facilitator"}) · Comprehensive Field Care & Screening` : "Comprehensive Field Care, Household Enrolment, NCD Screening & Offline Synchronization"}
+      subtitle={user?.name ? `${user.name} (${user.role === "cho" ? "Community Health Officer" : "ASHA Facilitator"}) · ${user.assignedVillage ? `${user.assignedVillage}, ` : ""}${user.district || "Nandurbar"} · Comprehensive Field Care & Screening` : "Government of Maharashtra · Health & Family Welfare Department · Rural Healthcare Unit"}
       navItems={navItems}
       activeTab={activeTab}
       onTabChange={setActiveTab}
@@ -1798,22 +1817,40 @@ export default function AshaChoWorkspace() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Village *</label>
-                  <Input
-                    value={householdForm.village}
-                    onChange={(e) => setHouseholdForm({ ...householdForm, village: e.target.value })}
-                    placeholder="Sundarpur"
-                    className="mt-1 text-xs"
-                  />
+                  <label className="font-bold text-slate-700 dark:text-slate-300">District *</label>
+                  <select
+                    value={householdForm.district}
+                    onChange={(e) => {
+                      const newDist = e.target.value;
+                      const cities = getCitiesForDistrict(newDist);
+                      setHouseholdForm({
+                        ...householdForm,
+                        district: newDist,
+                        village: cities[0] || "",
+                      });
+                    }}
+                    className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                  >
+                    {MAHARASHTRA_DISTRICTS.map((dist) => (
+                      <option key={dist} value={dist}>
+                        {dist}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300">District</label>
-                  <Input
-                    value={householdForm.district}
-                    onChange={(e) => setHouseholdForm({ ...householdForm, district: e.target.value })}
-                    placeholder="Ahmedabad Rural"
-                    className="mt-1 text-xs"
-                  />
+                  <label className="font-bold text-slate-700 dark:text-slate-300">City / Village / Taluka *</label>
+                  <select
+                    value={householdForm.village}
+                    onChange={(e) => setHouseholdForm({ ...householdForm, village: e.target.value })}
+                    className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                  >
+                    {availableHouseholdCities.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <div>
@@ -1942,22 +1979,40 @@ export default function AshaChoWorkspace() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Village *</label>
-                  <Input
-                    value={patientForm.village}
-                    onChange={(e) => setPatientForm({ ...patientForm, village: e.target.value })}
-                    placeholder="Sundarpur"
-                    className="mt-1 text-xs"
-                  />
+                  <label className="font-bold text-slate-700 dark:text-slate-300">District *</label>
+                  <select
+                    value={patientForm.district}
+                    onChange={(e) => {
+                      const newDist = e.target.value;
+                      const cities = getCitiesForDistrict(newDist);
+                      setPatientForm({
+                        ...patientForm,
+                        district: newDist,
+                        village: cities[0] || "",
+                      });
+                    }}
+                    className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                  >
+                    {MAHARASHTRA_DISTRICTS.map((dist) => (
+                      <option key={dist} value={dist}>
+                        {dist}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300">District *</label>
-                  <Input
-                    value={patientForm.district}
-                    onChange={(e) => setPatientForm({ ...patientForm, district: e.target.value })}
-                    placeholder="Ahmedabad Rural"
-                    className="mt-1 text-xs"
-                  />
+                  <label className="font-bold text-slate-700 dark:text-slate-300">City / Village / Taluka *</label>
+                  <select
+                    value={patientForm.village}
+                    onChange={(e) => setPatientForm({ ...patientForm, village: e.target.value })}
+                    className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                  >
+                    {availablePatientCities.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -2142,20 +2197,40 @@ export default function AshaChoWorkspace() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Village</label>
-                  <Input
-                    value={editPatientForm.village}
-                    onChange={(e) => setEditPatientForm({ ...editPatientForm, village: e.target.value })}
-                    className="mt-1 text-xs"
-                  />
+                  <label className="font-bold text-slate-700 dark:text-slate-300">District</label>
+                  <select
+                    value={editPatientForm.district}
+                    onChange={(e) => {
+                      const newDist = e.target.value;
+                      const cities = getCitiesForDistrict(newDist);
+                      setEditPatientForm({
+                        ...editPatientForm,
+                        district: newDist,
+                        village: cities[0] || "",
+                      });
+                    }}
+                    className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                  >
+                    {MAHARASHTRA_DISTRICTS.map((dist) => (
+                      <option key={dist} value={dist}>
+                        {dist}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300">District</label>
-                  <Input
-                    value={editPatientForm.district}
-                    onChange={(e) => setEditPatientForm({ ...editPatientForm, district: e.target.value })}
-                    className="mt-1 text-xs"
-                  />
+                  <label className="font-bold text-slate-700 dark:text-slate-300">City / Village / Taluka</label>
+                  <select
+                    value={editPatientForm.village}
+                    onChange={(e) => setEditPatientForm({ ...editPatientForm, village: e.target.value })}
+                    className="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                  >
+                    {availableEditPatientCities.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

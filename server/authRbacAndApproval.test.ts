@@ -160,6 +160,8 @@ describe("Registration Input Validation & Role Normalization", () => {
       designation: "Medical Officer",
       phone: "+91 9876543210",
       registrationNumber: "GMC-99281",
+      district: "Ahmedabad Rural",
+      assignedVillage: "Bavla",
     });
 
     expect(validStaffResult.isValid).toBe(true);
