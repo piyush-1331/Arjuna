@@ -1,24 +1,28 @@
 import { trpc } from "@/lib/trpc";
 import { supabase } from "@/lib/supabase";
 import { useCallback, useEffect, useState, useMemo } from "react";
-import { getDistrictForCityOrVillage } from "@shared/maharashtraLocations";
+import { getDistrictForCityOrVillage, findPredefinedAccount, DISTRICT_ADMIN_ACCOUNTS } from "@shared/maharashtraLocations";
 
 function deriveUserFromSession(session: any) {
-  if (!session?.user) return null;
-  const u = session.user;
-  const meta = u.user_metadata || {};
-  const email = (u.email || "").toLowerCase();
-  const stableKey = email || u.id;
+  const email = (session?.user?.email || "").toLowerCase();
+  const u = session?.user;
+  const meta = u?.user_metadata || {};
+  const stableKey = email || u?.id;
+
+  // 1. Check if email belongs to predefined district administrator or staff accounts
+  const predefined = email ? findPredefinedAccount(email) : null;
 
   // Attempt to restore cached user profile for this account
-  if (typeof window !== "undefined") {
+  if (typeof window !== "undefined" && stableKey) {
     try {
       const cached = localStorage.getItem(`arjuna.auth.user_profile.${stableKey}`);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (parsed && (parsed.openId === u.id || (email && parsed.email?.toLowerCase() === email))) {
+        if (parsed && (!u || parsed.openId === u.id || (email && parsed.email?.toLowerCase() === email))) {
           return {
             ...parsed,
+            district: predefined ? predefined.district : (parsed.district || "Pune"),
+            role: predefined ? predefined.role : (parsed.role || "citizen"),
             lastSignedIn: new Date(),
           };
         }
@@ -27,6 +31,49 @@ function deriveUserFromSession(session: any) {
       // Storage parse ignore
     }
   }
+
+  if (predefined) {
+    return {
+      id: 1,
+      openId: predefined.id,
+      authId: predefined.id,
+      name: predefined.name,
+      email: predefined.email,
+      loginMethod: "supabase",
+      role: predefined.role,
+      status: "APPROVED",
+      phone: predefined.phone || null,
+      dateOfBirth: null,
+      age: null,
+      gender: null,
+      village: predefined.village || null,
+      district: predefined.district,
+      facilityId: 101,
+      facilityName: predefined.facilityName || null,
+      designation: predefined.designation || null,
+      employeeId: `EMP-${predefined.id.toUpperCase()}`,
+      registrationNumber: null,
+      assignedVillage: predefined.village || null,
+      emergencyContactName: null,
+      emergencyContactPhone: null,
+      bloodGroup: null,
+      allergies: null,
+      conditions: null,
+      address: null,
+      pincode: null,
+      abhaId: null,
+      avatarUrl: null,
+      approvalRequestedAt: null,
+      approvedAt: new Date(),
+      approvedBy: "system",
+      rejectionReason: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      lastSignedIn: new Date(),
+    } as any;
+  }
+
+  if (!u) return null;
 
   const role = meta.selected_role || meta.role || "citizen";
   const fullName =
@@ -92,6 +139,13 @@ export function useAuth() {
   const utils = trpc.useUtils();
   const logoutMutation = trpc.auth.logout.useMutation();
 
+  const [activeEmail, setActiveEmail] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("arjuna.auth.active_email") || null;
+    }
+    return null;
+  });
+
   const meQuery = trpc.auth.me.useQuery(undefined, {
     enabled: Boolean(session) || !supabase,
     retry: false,
@@ -113,6 +167,10 @@ export function useAuth() {
       setSession(nextSession);
       setSessionLoading(false);
       if (nextSession) {
+        if (nextSession.user?.email) {
+          setActiveEmail(nextSession.user.email);
+          localStorage.setItem("arjuna.auth.active_email", nextSession.user.email.toLowerCase());
+        }
         void utils.auth.me.invalidate();
       }
     });
@@ -122,9 +180,16 @@ export function useAuth() {
     };
   }, [utils]);
 
-  const fallbackUser = useMemo(() => deriveUserFromSession(session), [session]);
+  const fallbackUser = useMemo(() => {
+    if (session) return deriveUserFromSession(session);
+    if (activeEmail) {
+      return deriveUserFromSession({ user: { email: activeEmail, id: activeEmail } });
+    }
+    return null;
+  }, [session, activeEmail]);
+
   const user = meQuery.data || fallbackUser;
-  const isAuthenticated = Boolean(user && (session || !supabase));
+  const isAuthenticated = Boolean(user && (session || activeEmail || !supabase));
 
   // Sync fresh user profile data to persistent local cache
   useEffect(() => {
@@ -160,12 +225,14 @@ export function useAuth() {
 
     try {
       localStorage.removeItem("arjuna.pendingRole");
+      localStorage.removeItem("arjuna.auth.active_email");
       sessionStorage.removeItem("manus-cookie");
     } catch {
       // Ignore storage errors
     }
 
     setSession(null);
+    setActiveEmail(null);
     utils.auth.me.setData(undefined, null);
     await utils.auth.me.invalidate();
 
@@ -181,7 +248,13 @@ export function useAuth() {
     loading: sessionLoading && !user,
     error: meQuery.error ?? null,
     isAuthenticated,
-    refresh: () => meQuery.refetch(),
+    refresh: () => {
+      if (typeof window !== "undefined") {
+        const emailNow = localStorage.getItem("arjuna.auth.active_email");
+        if (emailNow) setActiveEmail(emailNow);
+      }
+      return meQuery.refetch();
+    },
     logout,
   };
 }

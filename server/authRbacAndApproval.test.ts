@@ -14,6 +14,11 @@ import {
   validateSupabaseCredentials,
 } from "../shared/supabaseAuthFlow";
 import { getPostLoginRoute, normalizeDashboardRole } from "../shared/authFlow";
+import {
+  findPredefinedAccount,
+  DISTRICT_ADMIN_ACCOUNTS,
+  SYSTEM_ADMIN_ACCOUNT,
+} from "../shared/maharashtraLocations";
 import * as db from "./db";
 
 // Helper to create mock TrpcContext
@@ -227,6 +232,48 @@ describe("Account Status & Post-Login Routing", () => {
     expect(normalizeDashboardRole("admin")).toBe("administrator");
     expect(normalizeDashboardRole("administrator")).toBe("administrator");
     expect(normalizeDashboardRole("doctor")).toBe("doctor");
+  });
+
+  it("authenticates and resolves correct district for all 36 Maharashtra district admins", () => {
+    expect(DISTRICT_ADMIN_ACCOUNTS.length).toBe(37); // 36 districts + 1 system admin
+
+    // Pune District Admin
+    const puneAdmin = findPredefinedAccount("admin.pune@arjuna.gov.in", "Admin@Arjuna2026");
+    expect(puneAdmin).not.toBeNull();
+    expect(puneAdmin?.district).toBe("Pune");
+    expect(puneAdmin?.role).toBe("administrator");
+    expect(puneAdmin?.status).toBe("APPROVED");
+    expect(getPostLoginRoute(puneAdmin!.role, puneAdmin!.status)).toBe("/dashboard/administrator");
+
+    // Nandurbar District Admin
+    const nandurbarAdmin = findPredefinedAccount("admin.nandurbar@arjuna.gov.in", "Admin@Arjuna2026");
+    expect(nandurbarAdmin).not.toBeNull();
+    expect(nandurbarAdmin?.district).toBe("Nandurbar");
+    expect(nandurbarAdmin?.role).toBe("administrator");
+
+    // State / System Admin
+    const stateAdmin = findPredefinedAccount("admin@arjuna.gov.in", "Admin@Arjuna2026");
+    expect(stateAdmin).not.toBeNull();
+    expect(stateAdmin?.isSystemAdmin).toBe(true);
+
+    // Reject wrong password
+    const wrongPass = findPredefinedAccount("admin.pune@arjuna.gov.in", "WrongPassword123!");
+    expect(wrongPass).toBeNull();
+  });
+
+  it("authenticates predefined clinical staff and citizen accounts", () => {
+    const doctor = findPredefinedAccount("doctor.deshmukh@arjuna.gov.in", "Doctor@Arjuna2026");
+    expect(doctor).not.toBeNull();
+    expect(doctor?.role).toBe("doctor");
+    expect(doctor?.district).toBe("Nandurbar");
+
+    const asha = findPredefinedAccount("asha.sunita@arjuna.gov.in", "Asha@Arjuna2026");
+    expect(asha).not.toBeNull();
+    expect(asha?.role).toBe("asha");
+
+    const citizen = findPredefinedAccount("citizen.ramesh@arjuna.gov.in", "Citizen@Arjuna2026");
+    expect(citizen).not.toBeNull();
+    expect(citizen?.role).toBe("citizen");
   });
 });
 

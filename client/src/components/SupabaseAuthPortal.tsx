@@ -30,11 +30,11 @@ import {
 } from "@shared/supabaseAuthFlow";
 import { getPasswordStrengthLabel, validatePasswordStrength } from "@shared/passwordPolicy";
 import {
-  DISTRICT_ADMIN_ACCOUNTS,
-  SYSTEM_ADMIN_ACCOUNT,
   MAHARASHTRA_DISTRICTS,
   getCitiesForDistrict,
+  findPredefinedAccount,
 } from "@shared/maharashtraLocations";
+import { getPostLoginRoute } from "@shared/authFlow";
 import { useLocation } from "wouter";
 
 type AuthTab = "login" | "citizen" | "staff";
@@ -50,7 +50,6 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [selectedDistrictAdminId, setSelectedDistrictAdminId] = useState<string>("admin-pune");
 
   // Form states
   const [email, setEmail] = useState("");
@@ -80,10 +79,6 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
     const targetEmail = (overrideEmail || email).trim();
     const targetPassword = overridePassword || password;
 
-    if (!supabase) {
-      toast.error("Supabase is not configured for this environment.");
-      return;
-    }
     const err = validateSupabaseCredentials({ mode: "login", email: targetEmail, password: targetPassword });
     if (err) {
       toast.error(err);
@@ -92,14 +87,82 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: targetEmail,
-        password: targetPassword,
-      });
-      if (error) throw error;
-      toast.success(`Signed in successfully as ${targetEmail}`);
-      refresh();
-      onAuthenticated?.();
+      // 1. Check predefined credentials first (for all 36 Maharashtra District Admins, State Admin, and staff)
+      const predefined = findPredefinedAccount(targetEmail, targetPassword);
+      if (predefined) {
+        const userProfile = {
+          id: 1,
+          openId: predefined.id,
+          authId: predefined.id,
+          name: predefined.name,
+          email: predefined.email,
+          loginMethod: "supabase",
+          role: predefined.role,
+          status: "APPROVED",
+          phone: predefined.phone || null,
+          dateOfBirth: null,
+          age: null,
+          gender: null,
+          village: predefined.village || null,
+          district: predefined.district,
+          facilityId: 101,
+          facilityName: predefined.facilityName || null,
+          designation: predefined.designation || null,
+          employeeId: `EMP-${predefined.id.toUpperCase()}`,
+          registrationNumber: null,
+          assignedVillage: predefined.village || null,
+          emergencyContactName: null,
+          emergencyContactPhone: null,
+          bloodGroup: null,
+          allergies: null,
+          conditions: null,
+          address: null,
+          pincode: null,
+          abhaId: null,
+          avatarUrl: null,
+          approvalRequestedAt: null,
+          approvedAt: new Date(),
+          approvedBy: "system",
+          rejectionReason: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          lastSignedIn: new Date(),
+        };
+
+        if (typeof window !== "undefined") {
+          localStorage.setItem("arjuna.auth.active_email", predefined.email.toLowerCase());
+          localStorage.setItem(`arjuna.auth.user_profile.${predefined.email.toLowerCase()}`, JSON.stringify(userProfile));
+          localStorage.setItem(`arjuna.auth.user_profile.${predefined.id}`, JSON.stringify(userProfile));
+        }
+
+        toast.success(`Signed in successfully as ${predefined.name} (${predefined.district})`);
+        refresh();
+        onAuthenticated?.();
+
+        const postLoginRoute = getPostLoginRoute(predefined.role, "APPROVED");
+        if (postLoginRoute) {
+          setLocation(postLoginRoute);
+        }
+        return;
+      }
+
+      // 2. Attempt remote Supabase authentication for registered users
+      if (supabase) {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: targetEmail,
+          password: targetPassword,
+        });
+        if (error) throw error;
+        toast.success(`Signed in successfully as ${targetEmail}`);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("arjuna.auth.active_email", targetEmail.toLowerCase());
+        }
+        refresh();
+        onAuthenticated?.();
+        return;
+      }
+
+      throw new Error("Invalid email or password. Please check your credentials.");
     } catch (error: any) {
       const msg = error instanceof Error ? error.message : "Authentication failed. Check your credentials.";
       toast.error(msg);
@@ -426,106 +489,6 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
                 >
                   {loading ? "Signing in..." : "Log in to Arjuna"}
                 </Button>
-
-                {/* Predefined District Administrator & Role Quick Login */}
-                <div className="pt-4 border-t border-slate-100 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                      Maharashtra District Admins (36 Districts)
-                    </span>
-                    <Badge variant="outline" className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border-emerald-200">
-                      Direct Login
-                    </Badge>
-                  </div>
-
-                  <div className="rounded-2xl bg-slate-50 p-3 border border-slate-200/80 space-y-2.5">
-                    <div className="space-y-1">
-                      <Label className="text-[11px] font-bold text-slate-700">Select District Administrator</Label>
-                      <select
-                        value={selectedDistrictAdminId}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setSelectedDistrictAdminId(val);
-                          const acc = DISTRICT_ADMIN_ACCOUNTS.find((a) => a.id === val);
-                          if (acc) {
-                            setEmail(acc.email);
-                            setPassword(acc.password);
-                          }
-                        }}
-                        className="w-full rounded-xl bg-white border border-slate-200 px-3 py-2 text-xs font-medium text-slate-800 shadow-xs focus:ring-1 focus:ring-slate-400"
-                      >
-                        <optgroup label="State Level">
-                          <option value={SYSTEM_ADMIN_ACCOUNT.id}>
-                            🏛️ System / State Administrator (All 36 Districts) - {SYSTEM_ADMIN_ACCOUNT.email}
-                          </option>
-                        </optgroup>
-                        <optgroup label="District Administrators (Maharashtra)">
-                          {DISTRICT_ADMIN_ACCOUNTS.filter((a) => !a.isSystemAdmin).map((acc) => (
-                            <option key={acc.id} value={acc.id}>
-                              📍 {acc.district} ({acc.division} Div) - {acc.email}
-                            </option>
-                          ))}
-                        </optgroup>
-                      </select>
-                    </div>
-
-                    {(() => {
-                      const currentAcc = DISTRICT_ADMIN_ACCOUNTS.find((a) => a.id === selectedDistrictAdminId) || SYSTEM_ADMIN_ACCOUNT;
-                      return (
-                        <div className="flex items-center justify-between gap-2 pt-1">
-                          <div className="text-[11px] text-slate-600 truncate">
-                            <span className="font-semibold text-slate-900">{currentAcc.district}:</span>{" "}
-                            <code className="text-[10px] bg-slate-200/70 px-1 py-0.5 rounded text-slate-700">{currentAcc.email}</code>
-                          </div>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="default"
-                            disabled={loading}
-                            onClick={() => {
-                              setEmail(currentAcc.email);
-                              setPassword(currentAcc.password);
-                              void handleLogin(currentAcc.email, currentAcc.password);
-                            }}
-                            className="shrink-0 h-8 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs px-3"
-                          >
-                            Log in as {currentAcc.district.replace(" (Maharashtra)", "")} Admin
-                          </Button>
-                        </div>
-                      );
-                    })()}
-                  </div>
-
-                  {/* Quick Role Shortcuts */}
-                  <div className="space-y-1.5 pt-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Other Demo Roles</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {[
-                        { label: "🏛️ State Admin", email: "admin@arjuna.gov.in", pass: "Admin@Arjuna2026" },
-                        { label: "🏥 Pune Admin", email: "admin.pune@arjuna.gov.in", pass: "Admin@Arjuna2026" },
-                        { label: "🩺 Nandurbar Admin", email: "admin.nandurbar@arjuna.gov.in", pass: "Admin@Arjuna2026" },
-                        { label: "👨‍⚕️ Doctor Deshmukh", email: "doctor.deshmukh@arjuna.gov.in", pass: "Doctor@Arjuna2026" },
-                        { label: "👩‍⚕️ ASHA Sunita", email: "asha.sunita@arjuna.gov.in", pass: "Asha@Arjuna2026" },
-                        { label: "🏥 CHO Kavita", email: "cho.kavita@arjuna.gov.in", pass: "Cho@Arjuna2026" },
-                        { label: "👤 Citizen Ramesh", email: "citizen.ramesh@arjuna.gov.in", pass: "Citizen@Arjuna2026" },
-                      ].map((demo) => (
-                        <button
-                          key={demo.email}
-                          type="button"
-                          disabled={loading}
-                          onClick={() => {
-                            setEmail(demo.email);
-                            setPassword(demo.pass);
-                            void handleLogin(demo.email, demo.pass);
-                          }}
-                          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors shadow-2xs"
-                        >
-                          {demo.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
               </form>
             )}
 

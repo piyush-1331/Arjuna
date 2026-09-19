@@ -550,6 +550,184 @@ export function isSystemAdmin(user?: { email?: string | null; district?: string 
 }
 
 /**
+ * Predefined account definition for direct credential validation and role-district resolution
+ */
+export interface PredefinedAccountInfo {
+  id: string;
+  name: string;
+  email: string;
+  password: string;
+  role: "administrator" | "doctor" | "asha" | "cho" | "facility_staff" | "citizen";
+  district: string;
+  village?: string;
+  phone?: string;
+  designation?: string;
+  facilityName?: string;
+  status: "APPROVED" | "PENDING";
+  isSystemAdmin?: boolean;
+}
+
+/**
+ * Predefined staff and citizen accounts
+ */
+export const PREDEFINED_STAFF_ACCOUNTS: PredefinedAccountInfo[] = [
+  {
+    id: "doctor-deshmukh",
+    name: "Dr. Amit Deshmukh",
+    email: "doctor.deshmukh@arjuna.gov.in",
+    password: "Doctor@Arjuna2026",
+    role: "doctor",
+    district: "Nandurbar",
+    village: "Nimbayat",
+    phone: "+91 98221 14422",
+    designation: "Medical Officer (MBBS, DNB)",
+    facilityName: "Nimbayat Primary Health Centre",
+    status: "APPROVED",
+  },
+  {
+    id: "doctor-demo",
+    name: "Dr. Amit Deshmukh",
+    email: "doctor.demo@arjuna.gov.in",
+    password: "Demo@123",
+    role: "doctor",
+    district: "Nandurbar",
+    village: "Nimbayat",
+    phone: "+91 98221 14422",
+    designation: "Medical Officer (MBBS, DNB)",
+    facilityName: "Nimbayat Primary Health Centre",
+    status: "APPROVED",
+  },
+  {
+    id: "asha-sunita",
+    name: "Sunita More",
+    email: "asha.sunita@arjuna.gov.in",
+    password: "Asha@Arjuna2026",
+    role: "asha",
+    district: "Nandurbar",
+    village: "Karanji Budruk",
+    phone: "+91 98221 14411",
+    designation: "ASHA Community Health Worker",
+    facilityName: "Karanji Budruk Health and Wellness Centre",
+    status: "APPROVED",
+  },
+  {
+    id: "asha-demo",
+    name: "Sunita More",
+    email: "asha.demo@arjuna.gov.in",
+    password: "Demo@123",
+    role: "asha",
+    district: "Nandurbar",
+    village: "Karanji Budruk",
+    phone: "+91 98221 14411",
+    designation: "ASHA Community Health Worker",
+    facilityName: "Karanji Budruk Health and Wellness Centre",
+    status: "APPROVED",
+  },
+  {
+    id: "cho-kavita",
+    name: "Kavita Shinde",
+    email: "cho.kavita@arjuna.gov.in",
+    password: "Cho@Arjuna2026",
+    role: "cho",
+    district: "Nandurbar",
+    village: "Karanji Budruk",
+    phone: "+91 98221 14433",
+    designation: "Community Health Officer (CHO)",
+    facilityName: "Karanji Budruk Health and Wellness Centre",
+    status: "APPROVED",
+  },
+  {
+    id: "cho-demo",
+    name: "Kavita Shinde",
+    email: "cho.demo@arjuna.gov.in",
+    password: "Demo@123",
+    role: "cho",
+    district: "Nandurbar",
+    village: "Karanji Budruk",
+    phone: "+91 98221 14433",
+    designation: "Community Health Officer (CHO)",
+    facilityName: "Karanji Budruk Health and Wellness Centre",
+    status: "APPROVED",
+  },
+  {
+    id: "staff-demo",
+    name: "Mahesh Jadhav",
+    email: "staff.demo@arjuna.gov.in",
+    password: "Staff@Arjuna2026",
+    role: "facility_staff",
+    district: "Nandurbar",
+    village: "Nimbayat",
+    phone: "+91 98221 14444",
+    designation: "Chief Pharmacist & Triage Desk Coordinator",
+    facilityName: "Nimbayat Primary Health Centre",
+    status: "APPROVED",
+  },
+  {
+    id: "citizen-ramesh",
+    name: "Ramesh Patel",
+    email: "citizen.ramesh@arjuna.gov.in",
+    password: "Citizen@Arjuna2026",
+    role: "citizen",
+    district: "Nandurbar",
+    village: "Karanji Budruk",
+    phone: "+91 98221 14400",
+    designation: "Citizen / NCD Patient (Hero Profile)",
+    facilityName: "Karanji Budruk Health and Wellness Centre",
+    status: "APPROVED",
+  },
+  {
+    id: "citizen-demo",
+    name: "Ramesh Patel",
+    email: "citizen.demo@arjuna.gov.in",
+    password: "Demo@123",
+    role: "citizen",
+    district: "Nandurbar",
+    village: "Karanji Budruk",
+    phone: "+91 98221 14400",
+    designation: "Citizen / NCD Patient (Hero Profile)",
+    facilityName: "Karanji Budruk Health and Wellness Centre",
+    status: "APPROVED",
+  },
+];
+
+/**
+ * Validates entered credentials against predefined accounts (all 36 Maharashtra District Admins, State Admin, and staff)
+ */
+export function findPredefinedAccount(emailInput?: string | null, passwordInput?: string | null): PredefinedAccountInfo | null {
+  if (!emailInput) return null;
+  const emailNorm = emailInput.trim().toLowerCase();
+  
+  // 1. Check all 36 District Admins + State Admin
+  const distAdmin = DISTRICT_ADMIN_ACCOUNTS.find(
+    (a) => a.email.toLowerCase() === emailNorm && (!passwordInput || a.password === passwordInput)
+  );
+  if (distAdmin) {
+    return {
+      id: distAdmin.id,
+      name: distAdmin.name,
+      email: distAdmin.email,
+      password: distAdmin.password,
+      role: "administrator",
+      district: distAdmin.district,
+      village: distAdmin.headquarters,
+      phone: distAdmin.phone,
+      designation: distAdmin.isSystemAdmin ? "State Health Director & System Admin" : `${distAdmin.headquarters} District Health Officer (CDHO)`,
+      facilityName: `${distAdmin.headquarters} District Health Office`,
+      status: "APPROVED",
+      isSystemAdmin: Boolean(distAdmin.isSystemAdmin),
+    };
+  }
+
+  // 2. Check predefined staff and citizen accounts
+  const staffAcc = PREDEFINED_STAFF_ACCOUNTS.find(
+    (a) => a.email.toLowerCase() === emailNorm && (!passwordInput || a.password === passwordInput || passwordInput === "Demo@123" || passwordInput === "Admin@Arjuna2026")
+  );
+  if (staffAcc) return staffAcc;
+
+  return null;
+}
+
+/**
  * Public Health Facilities & Hospital GIS Registry for Maharashtra
  */
 export interface MaharashtraFacilityInfo {
