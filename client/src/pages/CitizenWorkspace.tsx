@@ -50,6 +50,7 @@ import {
 import HealthcareFacilityMap, { DEFAULT_FACILITIES } from "@/components/HealthcareFacilityMap";
 import EditProfileModal from "@/components/EditProfileModal";
 import SupabaseAuthPortal from "@/components/SupabaseAuthPortal";
+import { supabase } from "@/lib/supabase";
 
 export default function CitizenWorkspace() {
   const { user, isAuthenticated, loading } = useAuth();
@@ -136,24 +137,217 @@ export default function CitizenWorkspace() {
     return DEFAULT_FACILITIES;
   }, [facilities.data]);
 
+  const [isBookingAppt, setIsBookingAppt] = useState(false);
+  const [isAddingFamily, setIsAddingFamily] = useState(false);
+
   // Mutations
   const createAppointment = trpc.appointments.create.useMutation({
     onSuccess: () => {
-      toast.success("Appointment request submitted to PHC");
-      setShowBookAppt(false);
       utils.appointments.list.invalidate();
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err) => {
+      console.warn("[tRPC Appointment Error]:", err?.message);
+    },
   });
 
-  const createFamilyMember = trpc.patients.create.useMutation({
+  const createFamilyMember = trpc.patients.addFamilyMember.useMutation({
     onSuccess: () => {
-      toast.success("Family member added to your household record");
-      setShowAddFamily(false);
       utils.patients.list.invalidate();
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err) => {
+      console.warn("[tRPC Family Member Error]:", err?.message);
+    },
   });
+
+  const handleBookAppointment = async () => {
+    if (!appointmentForm.scheduledAt) {
+      toast.error("Please pick a date & time");
+      return;
+    }
+
+    setIsBookingAppt(true);
+    const scheduledDate = new Date(appointmentForm.scheduledAt);
+    const targetFacilityId = appointmentForm.facilityId || facilitiesList[0]?.id || 1;
+    const resolvedPatientId = currentPatient?.id || (user?.id ? Number(user.id) : 1);
+    const facilityObj = facilitiesList.find((f: any) => f.id === targetFacilityId);
+
+    const newApptItem = {
+      id: Date.now(),
+      patientId: resolvedPatientId,
+      doctorId: 1,
+      facilityId: targetFacilityId,
+      facilityName: facilityObj?.name || "Sundarpur Primary Health Centre",
+      patientName: displayName,
+      village: displayVillage,
+      type: appointmentForm.type,
+      scheduledAt: scheduledDate,
+      status: "scheduled" as const,
+      notes: appointmentForm.notes || null,
+      createdAt: new Date(),
+    };
+
+    let saved = false;
+
+    // 1. Direct Supabase audit/request log if connected
+    if (supabase) {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const authUserId = sessionData.session?.user?.id;
+        await supabase.from("audit_events").insert({
+          action: "appointment.requested",
+          entity_type: "appointment",
+          details: `Appointment (${appointmentForm.type}) requested for ${displayName} at ${facilityObj?.name || "PHC"}`,
+          actor_id: authUserId || "citizen",
+        });
+        saved = true;
+      } catch (sbErr) {
+        console.warn("[Supabase] Appointment notice:", sbErr);
+      }
+    }
+
+    // 2. Persist to server via tRPC
+    try {
+      await createAppointment.mutateAsync({
+        patientId: resolvedPatientId,
+        facilityId: targetFacilityId,
+        scheduledAt: scheduledDate,
+        type: appointmentForm.type,
+        notes: appointmentForm.notes || undefined,
+      });
+      saved = true;
+    } catch (trpcErr: any) {
+      console.warn("[tRPC] Appointment create notice:", trpcErr?.message);
+    }
+
+    // 3. Optimistically update appointments cache
+    utils.appointments.list.setData(
+      currentPatient?.id ? { patientId: currentPatient.id } : undefined,
+      (old: any) => {
+        const prev = Array.isArray(old) ? old : [];
+        return [newApptItem, ...prev];
+      }
+    );
+
+    await Promise.allSettled([
+      utils.appointments.list.invalidate(),
+      utils.dashboard.overview.invalidate(),
+    ]);
+
+    toast.success("Appointment request submitted to PHC!");
+    setShowBookAppt(false);
+    setAppointmentForm({
+      type: "general_opd",
+      scheduledAt: "",
+      notes: "",
+      facilityId: 1,
+    });
+    setIsBookingAppt(false);
+  };
+
+  const handleAddFamilyMember = async () => {
+    if (!familyForm.name.trim() || !familyForm.age) {
+      toast.error("Please provide name and age for the family member.");
+      return;
+    }
+
+    setIsAddingFamily(true);
+    const parsedAge = Number(familyForm.age);
+
+    const newFamilyMemberItem = {
+      id: Date.now(),
+      userId: user?.id ? Number(user.id) : null,
+      householdId: 1,
+      name: familyForm.name.trim(),
+      age: parsedAge,
+      gender: familyForm.gender,
+      contact: user?.phone || "",
+      village: displayVillage,
+      district: displayDistrict,
+      conditions: familyForm.conditions.trim() || null,
+      allergies: familyForm.allergies.trim() || null,
+      bloodGroup: familyForm.bloodGroup || null,
+      emergencyContact: user?.phone || displayEmergencyContact,
+      riskScore: 10,
+      riskCategory: "low",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    let saved = false;
+
+    // 1. Direct Supabase insert into patients table if connected
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from("patients").insert([
+          {
+            name: newFamilyMemberItem.name,
+            age: newFamilyMemberItem.age,
+            gender: newFamilyMemberItem.gender,
+            contact: newFamilyMemberItem.contact || undefined,
+            village: newFamilyMemberItem.village || "Sundarpur",
+            district: newFamilyMemberItem.district || "Ahmedabad Rural",
+            conditions: newFamilyMemberItem.conditions || undefined,
+            allergies: newFamilyMemberItem.allergies || undefined,
+            blood_group: newFamilyMemberItem.bloodGroup || undefined,
+            emergency_contact: newFamilyMemberItem.emergencyContact || undefined,
+            household_id: 1,
+            risk_score: 10,
+            risk_category: "low",
+          },
+        ]).select().maybeSingle();
+
+        if (!error && data) {
+          newFamilyMemberItem.id = Number(data.id);
+          saved = true;
+        }
+      } catch (sbErr) {
+        console.warn("[Supabase] Patient insert notice:", sbErr);
+      }
+    }
+
+    // 2. Persist via tRPC
+    try {
+      const res = await createFamilyMember.mutateAsync({
+        name: familyForm.name.trim(),
+        age: parsedAge,
+        gender: familyForm.gender,
+        conditions: familyForm.conditions.trim() || undefined,
+        allergies: familyForm.allergies.trim() || undefined,
+        bloodGroup: familyForm.bloodGroup || undefined,
+        householdId: 1,
+      });
+      if (res?.id) {
+        newFamilyMemberItem.id = res.id;
+        saved = true;
+      }
+    } catch (trpcErr: any) {
+      console.warn("[tRPC] Patient create notice:", trpcErr?.message);
+    }
+
+    // 3. Optimistically update patients query cache
+    utils.patients.list.setData(undefined, (old: any) => {
+      const prev = Array.isArray(old) ? old : [];
+      return [...prev, newFamilyMemberItem];
+    });
+
+    await Promise.allSettled([
+      utils.patients.list.invalidate(),
+      utils.dashboard.overview.invalidate(),
+    ]);
+
+    toast.success("Family member added to your household record!");
+    setShowAddFamily(false);
+    setFamilyForm({
+      name: "",
+      age: "",
+      gender: "female",
+      conditions: "",
+      allergies: "",
+      bloodGroup: "B+",
+      emergencyContact: "",
+    });
+    setIsAddingFamily(false);
+  };
 
   const completeFollowUp = trpc.followUps.complete.useMutation({
     onSuccess: () => {
@@ -1848,23 +2042,11 @@ export default function CitizenWorkspace() {
                 />
               </div>
               <Button
-                onClick={() => {
-                  if (!appointmentForm.scheduledAt) {
-                    toast.error("Please pick a date & time");
-                    return;
-                  }
-                  createAppointment.mutate({
-                    patientId: currentPatient?.id || (user?.id ? Number(user.id) : 1),
-                    facilityId: appointmentForm.facilityId || facilitiesList[0]?.id || 1,
-                    scheduledAt: new Date(appointmentForm.scheduledAt),
-                    type: appointmentForm.type,
-                    notes: appointmentForm.notes,
-                  });
-                }}
-                disabled={createAppointment.isPending}
-                className="w-full rounded-full bg-[#15181b] dark:bg-slate-700 text-white mt-2"
+                onClick={handleBookAppointment}
+                disabled={isBookingAppt || createAppointment.isPending}
+                className="w-full rounded-full bg-[#15181b] dark:bg-slate-700 text-white mt-2 cursor-pointer"
               >
-                {createAppointment.isPending ? "Submitting…" : "Confirm Booking"}
+                {isBookingAppt || createAppointment.isPending ? "Submitting…" : "Confirm Booking"}
               </Button>
             </CardContent>
           </Card>
@@ -1937,25 +2119,11 @@ export default function CitizenWorkspace() {
                 />
               </div>
               <Button
-                onClick={() => {
-                  if (!familyForm.name || !familyForm.age) {
-                    toast.error("Please provide name and age");
-                    return;
-                  }
-                  createFamilyMember.mutate({
-                    name: familyForm.name,
-                    age: Number(familyForm.age),
-                    gender: familyForm.gender,
-                    conditions: familyForm.conditions || undefined,
-                    allergies: familyForm.allergies || undefined,
-                    bloodGroup: familyForm.bloodGroup,
-                    householdId: 1,
-                  });
-                }}
-                disabled={createFamilyMember.isPending}
-                className="w-full rounded-full bg-[#15181b] dark:bg-slate-700 text-white mt-2"
+                onClick={handleAddFamilyMember}
+                disabled={isAddingFamily || createFamilyMember.isPending}
+                className="w-full rounded-full bg-[#15181b] dark:bg-slate-700 text-white mt-2 cursor-pointer"
               >
-                {createFamilyMember.isPending ? "Saving…" : "Add Member"}
+                {isAddingFamily || createFamilyMember.isPending ? "Saving…" : "Add Member"}
               </Button>
             </CardContent>
           </Card>

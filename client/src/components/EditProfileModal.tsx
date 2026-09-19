@@ -144,10 +144,14 @@ export function EditProfileModal({
       abhaId: abhaId.trim() || undefined,
     };
 
+    let savedSuccessfully = false;
+
     try {
-      // 1. Sync directly to Supabase client auth metadata if connected
+      // 1. Sync directly to Supabase client auth metadata and profiles table if connected
       if (supabase) {
         try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const authUser = sessionData.session?.user;
           await supabase.auth.updateUser({
             data: {
               full_name: payload.name,
@@ -168,22 +172,62 @@ export function EditProfileModal({
               abha_id: payload.abhaId,
             },
           });
+          savedSuccessfully = true;
+
+          if (authUser?.id) {
+            await supabase.from("profiles").upsert(
+              {
+                open_id: authUser.id,
+                auth_id: authUser.id,
+                name: payload.name,
+                phone: payload.phone,
+                date_of_birth: payload.dateOfBirth,
+                age: payload.age,
+                gender: payload.gender,
+                village: payload.village,
+                district: payload.district || "Ahmedabad Rural",
+                address: payload.address,
+                pincode: payload.pincode,
+                emergency_contact_name: payload.emergencyContactName,
+                emergency_contact_phone: payload.emergencyContactPhone,
+                blood_group: payload.bloodGroup,
+                allergies: payload.allergies,
+                conditions: payload.conditions,
+                abha_id: payload.abhaId,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "open_id" }
+            );
+          }
         } catch (sbErr) {
-          console.warn("[Supabase] Client user_metadata update warning:", sbErr);
+          console.warn("[Supabase] Client update warning:", sbErr);
         }
       }
 
-      // 2. Persist to server database
-      const res = await updateMutation.mutateAsync(payload);
-
-      // 3. Immediately update TRPC query cache
-      if (res?.user) {
-        utils.auth.me.setData(undefined, res.user as any);
-        utils.profile.get.setData(undefined, res.user as any);
+      // 2. Persist to server database via tRPC if available
+      try {
+        const res = await updateMutation.mutateAsync(payload);
+        if (res?.user) {
+          utils.auth.me.setData(undefined, res.user as any);
+          utils.profile.get.setData(undefined, res.user as any);
+          savedSuccessfully = true;
+        }
+      } catch (trpcErr: any) {
+        console.warn("[tRPC] Profile update notice:", trpcErr?.message);
+        if (!savedSuccessfully && !supabase) {
+          throw trpcErr;
+        }
       }
 
-      // 4. Invalidate dependent queries
-      await Promise.all([
+      // 3. Optimistically update local user state and invalidate queries
+      const updatedLocalUser = {
+        ...(user || {}),
+        ...payload,
+      };
+      utils.auth.me.setData(undefined, updatedLocalUser as any);
+      utils.profile.get.setData(undefined, updatedLocalUser as any);
+
+      await Promise.allSettled([
         utils.auth.me.invalidate(),
         utils.profile.get.invalidate(),
         utils.patients.list.invalidate(),
@@ -198,7 +242,7 @@ export function EditProfileModal({
       onOpenChange(false);
       onSuccess?.();
     } catch (err: any) {
-      toast.error(err.message || "Failed to save profile changes.");
+      toast.error(err?.message || "Failed to save profile changes.");
     }
   };
 

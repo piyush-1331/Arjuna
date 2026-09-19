@@ -72,14 +72,13 @@ export function createApp() {
   registerStorageProxy(app);
   registerOAuthRoutes(app);
 
-  // 6. tRPC API
-  app.use(
-    "/api/trpc",
-    createExpressMiddleware({
-      router: appRouter,
-      createContext,
-    })
-  );
+  // 6. tRPC API (supports both /api/trpc and /trpc rewrites)
+  const trpcMiddleware = createExpressMiddleware({
+    router: appRouter,
+    createContext,
+  });
+  app.use("/api/trpc", trpcMiddleware);
+  app.use("/trpc", trpcMiddleware);
 
   // 7. Global Error Handler for Express
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

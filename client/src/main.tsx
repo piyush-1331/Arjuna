@@ -92,11 +92,54 @@ const trpcClient = trpc.createClient({
         }
         return {};
       },
-      fetch(input, init) {
-        return globalThis.fetch(input, {
-          ...(init ?? {}),
-          credentials: "include",
-        });
+      async fetch(input, init) {
+        try {
+          const res = await globalThis.fetch(input, {
+            ...(init ?? {}),
+            credentials: "include",
+          });
+          const contentType = res.headers.get("content-type") || "";
+          if (contentType.includes("text/html") || !res.ok && !contentType.includes("json")) {
+            return new Response(
+              JSON.stringify([
+                {
+                  error: {
+                    json: {
+                      message: res.status === 404
+                        ? "API service route not found."
+                        : `API server returned status ${res.status}.`,
+                      code: -32603,
+                      data: { code: "INTERNAL_SERVER_ERROR", httpStatus: res.status },
+                    },
+                  },
+                },
+              ]),
+              {
+                status: res.status >= 400 ? res.status : 500,
+                headers: { "Content-Type": "application/json" },
+              }
+            );
+          }
+          return res;
+        } catch (err: any) {
+          return new Response(
+            JSON.stringify([
+              {
+                error: {
+                  json: {
+                    message: err?.message || "Network connection error.",
+                    code: -32603,
+                    data: { code: "INTERNAL_SERVER_ERROR" },
+                  },
+                },
+              },
+            ]),
+            {
+              status: 500,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        }
       },
     }),
   ],
