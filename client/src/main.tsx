@@ -71,26 +71,32 @@ const trpcClient = trpc.createClient({
       url: "/api/trpc",
       transformer: superjson,
       headers() {
-        // Preview auto-login fallback: when the browser blocks iframe cookies
-        // (Safari ITP / private browsing / WebView), the runtime mirrors the
-        // session into sessionStorage so we can forward it as a Bearer token.
-        // The regular OAuth cookie flow keeps working and takes priority server-side.
         const supabaseToken = getSupabaseAccessToken();
         if (supabaseToken) return { Authorization: `Bearer ${supabaseToken}` };
+
+        const headers: Record<string, string> = {};
         try {
+          const activeEmail = localStorage.getItem("arjuna.auth.active_email");
+          const sessionToken = localStorage.getItem("arjuna.auth.session_token");
+          if (sessionToken) {
+            headers["Authorization"] = `Bearer ${sessionToken}`;
+          }
+          if (activeEmail) {
+            headers["x-arjuna-user-email"] = activeEmail;
+          }
           const raw = sessionStorage.getItem("manus-cookie");
-          if (raw) {
+          if (raw && !headers["Authorization"]) {
             const prefix = `${COOKIE_NAME}=`;
             const pair = raw.split(";").find(s => s.trim().startsWith(prefix));
             const token = pair?.trim().slice(prefix.length);
             if (token) {
-              return { Authorization: `Bearer ${token}` };
+              headers["Authorization"] = `Bearer ${token}`;
             }
           }
         } catch {
-          // sessionStorage unavailable
+          // storage unavailable
         }
-        return {};
+        return headers;
       },
       async fetch(input, init) {
         try {

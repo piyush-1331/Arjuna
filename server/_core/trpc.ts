@@ -99,9 +99,16 @@ export const adminProcedure = t.procedure.use(
       });
     }
 
-    // Verify configured ADMIN_EMAIL matches
+    // Verify configured ADMIN_EMAIL matches or user is an official district administrator
     const configuredAdminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
-    if (configuredAdminEmail && ctx.user.email?.toLowerCase() !== configuredAdminEmail) {
+    const userEmail = ctx.user.email?.toLowerCase() || "";
+    const isPredefinedAdmin =
+      userEmail.startsWith("admin.") ||
+      userEmail === "admin@arjuna.gov.in" ||
+      userEmail === "state.admin@arjuna.gov.in" ||
+      Boolean((ctx.user as any).isSystemAdmin);
+
+    if (configuredAdminEmail && userEmail !== configuredAdminEmail && !isPredefinedAdmin) {
       throw new TRPCError({
         code: "FORBIDDEN",
         message: "Administrator access denied: User identity does not match the configured system administrator account.",

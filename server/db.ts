@@ -32,7 +32,7 @@ import {
   DEMO_DATA_LABEL,
   DEMO_DATA_DISCLAIMER,
 } from "./syntheticMaharashtraData";
-import { getDistrictForCityOrVillage } from "../shared/maharashtraLocations";
+import { getDistrictForCityOrVillage, findPredefinedAccount } from "../shared/maharashtraLocations";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -99,17 +99,18 @@ export function initMemoryStore(forceReset = false) {
   // 3. 100+ Synthetic Patients (Ramesh Patel = ID 1)
   memPatients = generateSyntheticMaharashtraPatients();
 
-  // 4. Users (Demo Accounts)
+  // 4. Users (Predefined Accounts for 36 Districts + State Admin + Staff)
   memUsers = SYNTHETIC_DEMO_ACCOUNTS.map((u, idx) => ({
     id: idx + 1,
     openId: u.openId,
     authId: u.openId,
     name: u.name,
     email: u.email,
-    loginMethod: "demo",
+    password: u.password || "Admin@Arjuna2026",
+    loginMethod: "predefined",
     role: u.role,
     status: "APPROVED",
-    phone: "+91 98221 440" + idx,
+    phone: u.phone || "+91 98221 440" + idx,
     dateOfBirth: "1985-05-15",
     age: 40,
     gender: "male",
@@ -117,7 +118,7 @@ export function initMemoryStore(forceReset = false) {
     district: u.district || "Ahmedabad Rural",
     facilityId: u.facilityId,
     facilityName: u.facilityName || "Karanji Primary Health Centre",
-    designation: u.role === "doctor" ? "Medical Officer" : u.role === "asha" ? "ASHA Facilitator" : u.role === "cho" ? "Community Health Officer" : "Staff",
+    designation: u.designation || (u.role === "doctor" ? "Medical Officer" : u.role === "asha" ? "ASHA Facilitator" : u.role === "cho" ? "Community Health Officer" : "Staff"),
     employeeId: `EMP-ARJ-${1000 + idx}`,
     registrationNumber: u.role === "doctor" ? "MMC/2012/04589" : null,
     assignedVillage: u.village || "Karanji Budruk",
@@ -773,6 +774,7 @@ export async function upsertUser(user: Record<string, any>): Promise<any> {
     authId: user.authId || user.openId,
     name: resolvedName,
     email: user.email !== undefined ? user.email : (existing?.email ?? null),
+    password: user.password !== undefined ? user.password : (existing?.password ?? null),
     loginMethod: user.loginMethod !== undefined ? user.loginMethod : (existing?.loginMethod ?? "supabase"),
     role: targetRole,
     status: targetStatus,
@@ -942,6 +944,111 @@ export async function getUserById(id: number) {
     } catch { /* fallback */ }
   }
   return undefined;
+}
+
+export async function getUserByEmail(email: string) {
+  const normEmail = email.toLowerCase().trim();
+  if (supabaseDb.isSupabaseDataConfigured()) {
+    try {
+      const usersList = await supabaseDb.listUsers({ search: normEmail });
+      const found = usersList?.find(u => u.email?.toLowerCase() === normEmail);
+      if (found) return found;
+    } catch (err) {
+      console.warn("[Database] Supabase getUserByEmail warning:", err);
+    }
+  }
+  const memUser = memUsers.find(u => u.email?.toLowerCase() === normEmail);
+  if (memUser) return memUser;
+
+  const db = await getDb();
+  if (db) {
+    try {
+      const result = await db.select().from(users).where(eq(users.email, normEmail)).limit(1);
+      if (result[0]) return result[0];
+    } catch { /* fallback */ }
+  }
+  return undefined;
+}
+
+export async function authenticateUser(email: string, password: string) {
+  const normEmail = email.toLowerCase().trim();
+  
+  // 1. Check existing in-memory / SQL database user
+  const user = await getUserByEmail(normEmail);
+  if (user && user.password && user.password === password) {
+    return user;
+  }
+
+  // 2. Check predefined accounts (covers all 36 Maharashtra District Admins, State Admin, and staff)
+  const predefined = findPredefinedAccount(normEmail, password);
+  if (predefined) {
+    let existing = memUsers.find(u => u.email?.toLowerCase() === normEmail || u.openId === predefined.id);
+    if (!existing) {
+      existing = {
+        id: memUsers.length + 1,
+        openId: predefined.id,
+        authId: predefined.id,
+        name: predefined.name,
+        email: predefined.email,
+        password: predefined.password,
+        loginMethod: "predefined",
+        role: predefined.role,
+        status: "APPROVED",
+        phone: predefined.phone || "+91 98221 00000",
+        dateOfBirth: null,
+        age: null,
+        gender: "other",
+        village: predefined.village || null,
+        district: predefined.district,
+        facilityId: 101,
+        facilityName: predefined.facilityName || `${predefined.district} District Health Office`,
+        designation: predefined.designation || "District Administrator",
+        employeeId: `EMP-${predefined.id.toUpperCase()}`,
+        registrationNumber: null,
+        assignedVillage: predefined.village || null,
+        emergencyContactName: null,
+        emergencyContactPhone: null,
+        avatarUrl: null,
+        approvalRequestedAt: null,
+        approvedAt: new Date(),
+        approvedBy: "system",
+        rejectionReason: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        lastSignedIn: new Date(),
+      };
+      memUsers.push(existing);
+    } else {
+      existing.password = predefined.password;
+      existing.district = predefined.district;
+      existing.role = predefined.role;
+    }
+    return existing;
+  }
+
+  return null;
+}
+
+export async function seedPredefinedUsersToDb() {
+  const db = await getDb();
+  if (db) {
+    for (const u of memUsers) {
+      try {
+        await db.insert(users).values(u as any).onDuplicateKeyUpdate({
+          set: {
+            password: u.password,
+            role: u.role,
+            district: u.district,
+            status: u.status,
+            name: u.name,
+            updatedAt: new Date(),
+          },
+        });
+      } catch (e) {
+        // Ignore duplicate insertion errors
+      }
+    }
+  }
 }
 
 export async function listUsers(filter?: { role?: string; status?: string; district?: string; facilityId?: number; search?: string }) {

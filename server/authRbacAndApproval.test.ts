@@ -26,7 +26,8 @@ function createMockContext(
   role: "citizen" | "asha" | "cho" | "asha_cho" | "doctor" | "facility_staff" | "administrator" | "admin",
   status: "PENDING" | "APPROVED" | "REJECTED" | "SUSPENDED" = "APPROVED",
   email: string = "test@example.com",
-  id: number = 42
+  id: number = 42,
+  district: string = "Pune"
 ): TrpcContext {
   return {
     user: {
@@ -42,8 +43,8 @@ function createMockContext(
       dateOfBirth: "1990-01-01",
       age: 35,
       gender: "female",
-      village: "Sanand",
-      district: "Ahmedabad Rural",
+      village: "Pune City",
+      district,
       facilityId: null,
       facilityName: "Sanand Community Health Centre",
       designation: "Medical Officer",
@@ -475,4 +476,93 @@ describe("Administrator RBAC, Invariants & Staff Approval Workflow", () => {
     getUserReactivateSpy.mockRestore();
     reactivateSpy.mockRestore();
   });
+
+  describe("Database Credentials Authentication (auth.login & db.authenticateUser)", () => {
+    it("authenticates Pune District Admin with correct credentials and returns Pune district workspace", async () => {
+      const user = await db.authenticateUser("admin.pune@arjuna.gov.in", "Admin@Arjuna2026");
+      expect(user).toBeDefined();
+      expect(user?.role).toBe("administrator");
+      expect(user?.district).toBe("Pune");
+      expect(user?.status).toBe("APPROVED");
+    });
+
+    it("authenticates State System Admin with correct credentials and returns statewide scope", async () => {
+      const user = await db.authenticateUser("admin@arjuna.gov.in", "Admin@Arjuna2026");
+      expect(user).toBeDefined();
+      expect(user?.role).toBe("administrator");
+      expect(user?.status).toBe("APPROVED");
+    });
+
+    it("fails authentication when wrong password is provided", async () => {
+      const user = await db.authenticateUser("admin.pune@arjuna.gov.in", "WrongPassword123!");
+      expect(user).toBeNull();
+    });
+
+    it("authenticates via appRouter.auth.login procedure and returns user session", async () => {
+      const ctx = createMockContext("citizen", "APPROVED", "guest@example.com", 999);
+      const caller = appRouter.createCaller(ctx);
+
+      const res = await caller.auth.login({
+        email: "admin.nandurbar@arjuna.gov.in",
+        password: "Admin@Arjuna2026",
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.user.role).toBe("administrator");
+      expect(res.user.district).toBe("Nandurbar");
+      expect(res.token).toBeDefined();
+      expect(typeof res.token).toBe("string");
+      expect(res.token.length).toBeGreaterThan(10);
+    });
+
+    it("rejects appRouter.auth.login for invalid credentials", async () => {
+      const ctx = createMockContext("citizen", "APPROVED", "guest@example.com", 999);
+      const caller = appRouter.createCaller(ctx);
+
+      await expect(
+        caller.auth.login({
+          email: "admin.nandurbar@arjuna.gov.in",
+          password: "BadPassword@999",
+        })
+      ).rejects.toThrow("Invalid email or password");
+    });
+
+    it("allows Pune District Administrator to create and auto-approve a staff member in Pune", async () => {
+      const puneAdminCtx = createMockContext("administrator", "APPROVED", "admin.pune@arjuna.gov.in", 101, "Pune");
+      const caller = appRouter.createCaller(puneAdminCtx);
+
+      const res = await caller.admin.createStaffUser({
+        name: "Demo ASHA Pune",
+        email: "demo.asha.pune@arjuna.gov.in",
+        role: "asha",
+        phone: "+91 94221 55667",
+        district: "Pune",
+        assignedVillage: "Pune City",
+        designation: "ASHA Worker",
+        facilityName: "Pune District Hospital",
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.user.name).toBe("Demo ASHA Pune");
+      expect(res.user.district).toBe("Pune");
+      expect(res.user.status).toBe("APPROVED");
+    });
+
+    it("prevents Pune District Administrator from creating a staff member in another district", async () => {
+      const puneAdminCtx = createMockContext("administrator", "APPROVED", "admin.pune@arjuna.gov.in", 101, "Pune");
+      const caller = appRouter.createCaller(puneAdminCtx);
+
+      await expect(
+        caller.admin.createStaffUser({
+          name: "Demo Doctor Nandurbar",
+          email: "demo.nandurbar@arjuna.gov.in",
+          role: "doctor",
+          phone: "+91 94221 99999",
+          district: "Nandurbar",
+          assignedVillage: "Shahada",
+        })
+      ).rejects.toThrow(/District Administrators can only create staff accounts in their assigned district/);
+    });
+  });
 });
+

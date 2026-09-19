@@ -12,6 +12,7 @@ export const users = mysqlTable("users", {
   authId: varchar("authId", { length: 64 }),
   name: text("name"),
   email: varchar("email", { length: 320 }),
+  password: varchar("password", { length: 255 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["citizen", "asha", "cho", "asha_cho", "doctor", "facility_staff", "administrator", "admin"]).default("citizen").notNull(),
   status: mysqlEnum("status", ["PENDING", "APPROVED", "REJECTED", "SUSPENDED"]).default("APPROVED").notNull(),

@@ -34,6 +34,7 @@ import {
   getCitiesForDistrict,
   findPredefinedAccount,
 } from "@shared/maharashtraLocations";
+import { trpc } from "@/lib/trpc";
 import { getPostLoginRoute } from "@shared/authFlow";
 import { useLocation } from "wouter";
 
@@ -72,6 +73,7 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
   const [registrationNumber, setRegistrationNumber] = useState("");
   const [assignedVillage, setAssignedVillage] = useState("");
 
+  const loginMutation = trpc.auth.login.useMutation();
   const passwordStrength = validatePasswordStrength(password);
   const strengthInfo = getPasswordStrengthLabel(passwordStrength.score);
 
@@ -87,7 +89,80 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
 
     setLoading(true);
     try {
-      // 1. Check predefined credentials first (for all 36 Maharashtra District Admins, State Admin, and staff)
+      // 1. Authenticate against database via tRPC
+      try {
+        const res = await loginMutation.mutateAsync({
+          email: targetEmail,
+          password: targetPassword,
+        });
+
+        if (res.success && res.user) {
+          const userProfile = {
+            id: res.user.id,
+            openId: res.user.openId,
+            authId: res.user.authId || res.user.openId,
+            name: res.user.name,
+            email: res.user.email,
+            loginMethod: "database",
+            role: res.user.role,
+            status: res.user.status,
+            phone: res.user.phone || null,
+            dateOfBirth: null,
+            age: null,
+            gender: null,
+            village: res.user.village || null,
+            district: res.user.district,
+            facilityId: res.user.facilityId || 101,
+            facilityName: res.user.facilityName || null,
+            designation: res.user.designation || null,
+            employeeId: `EMP-${res.user.openId.toUpperCase()}`,
+            registrationNumber: null,
+            assignedVillage: res.user.village || null,
+            emergencyContactName: null,
+            emergencyContactPhone: null,
+            bloodGroup: null,
+            allergies: null,
+            conditions: null,
+            address: null,
+            pincode: null,
+            abhaId: null,
+            avatarUrl: null,
+            approvalRequestedAt: null,
+            approvedAt: new Date(),
+            approvedBy: "system",
+            rejectionReason: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            lastSignedIn: new Date(),
+          };
+
+          if (typeof window !== "undefined") {
+            localStorage.setItem("arjuna.auth.active_email", targetEmail.toLowerCase());
+            if (res.sessionToken || (res as any).token) {
+              localStorage.setItem("arjuna.auth.session_token", res.sessionToken || (res as any).token);
+            }
+            localStorage.setItem(`arjuna.auth.user_profile.${targetEmail.toLowerCase()}`, JSON.stringify(userProfile));
+            localStorage.setItem(`arjuna.auth.user_profile.${res.user.openId}`, JSON.stringify(userProfile));
+          }
+
+          toast.success(`Signed in successfully as ${res.user.name} (${res.user.district || "Maharashtra"})`);
+          refresh();
+          onAuthenticated?.();
+
+          const postLoginRoute = getPostLoginRoute(res.user.role, res.user.status);
+          if (postLoginRoute) {
+            setLocation(postLoginRoute);
+          }
+          return;
+        }
+      } catch (backendErr: any) {
+        if (backendErr?.data?.code === "FORBIDDEN") {
+          throw backendErr;
+        }
+        // Fall through to predefined account resolver or Supabase fallback
+      }
+
+      // 2. Direct Predefined account resolver (for instant client resolution across all 36 Maharashtra District Admins)
       const predefined = findPredefinedAccount(targetEmail, targetPassword);
       if (predefined) {
         const userProfile = {
@@ -96,7 +171,7 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
           authId: predefined.id,
           name: predefined.name,
           email: predefined.email,
-          loginMethod: "supabase",
+          loginMethod: "database",
           role: predefined.role,
           status: "APPROVED",
           phone: predefined.phone || null,
@@ -131,6 +206,7 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
 
         if (typeof window !== "undefined") {
           localStorage.setItem("arjuna.auth.active_email", predefined.email.toLowerCase());
+          localStorage.setItem("arjuna.auth.session_token", `session-${predefined.id}-${Date.now()}`);
           localStorage.setItem(`arjuna.auth.user_profile.${predefined.email.toLowerCase()}`, JSON.stringify(userProfile));
           localStorage.setItem(`arjuna.auth.user_profile.${predefined.id}`, JSON.stringify(userProfile));
         }
@@ -146,7 +222,7 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
         return;
       }
 
-      // 2. Attempt remote Supabase authentication for registered users
+      // 3. Attempt remote Supabase authentication for registered users
       if (supabase) {
         const { error } = await supabase.auth.signInWithPassword({
           email: targetEmail,
@@ -162,7 +238,7 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
         return;
       }
 
-      throw new Error("Invalid email or password. Please check your credentials.");
+      throw new Error("Invalid email or password. Please verify your credentials.");
     } catch (error: any) {
       const msg = error instanceof Error ? error.message : "Authentication failed. Check your credentials.";
       toast.error(msg);

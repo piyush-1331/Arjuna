@@ -3,6 +3,7 @@ import { getDistrictForCityOrVillage, isSystemAdmin } from "@shared/maharashtraL
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, approvedProcedure, careTeamProcedure, doctorProcedure, facilityStaffProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { sdk } from "./_core/sdk";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
@@ -79,6 +80,8 @@ import {
   createStaffUser,
   updateUserProfile,
   resetDemoEnvironment,
+  authenticateUser,
+  getUserByEmail,
 } from "./db";
 import { SYNTHETIC_DEMO_ACCOUNTS } from "./syntheticMaharashtraData";
 import {
@@ -311,6 +314,72 @@ export const appRouter = router({
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
+    login: publicProcedure
+      .input(
+        z.object({
+          email: z.string().email("Valid email is required"),
+          password: z.string().min(1, "Password is required"),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const email = input.email.toLowerCase().trim();
+        const password = input.password;
+
+        const user = await authenticateUser(email, password);
+        if (!user) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Invalid email or password. Please verify your credentials.",
+          });
+        }
+
+        if (user.status === "REJECTED" || user.status === "SUSPENDED") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: `Account is ${user.status}. Please contact system administration.`,
+          });
+        }
+
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        let sessionToken = `session-${user.openId}-${Date.now()}`;
+        try {
+          sessionToken = await sdk.createSessionToken(user.openId, { name: user.name || user.email || "" });
+        } catch {
+          // fallback string
+        }
+        if (ctx.res && typeof ctx.res.cookie === "function") {
+          ctx.res.cookie(COOKIE_NAME, sessionToken, cookieOptions);
+        }
+
+        await createAuditEvent({
+          actorId: user.id,
+          action: "auth.login",
+          entityType: "user",
+          entityId: user.id,
+          detail: `User ${user.email} (${user.role}, District: ${user.district || "Statewide"}) authenticated via database credentials`,
+        });
+
+        return {
+          success: true,
+          user: {
+            id: user.id,
+            openId: user.openId,
+            authId: user.authId || user.openId,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            status: user.status,
+            district: user.district,
+            facilityId: user.facilityId,
+            facilityName: user.facilityName,
+            village: user.village,
+            phone: user.phone,
+            designation: user.designation,
+          },
+          token: sessionToken,
+          sessionToken,
+        };
+      }),
     demoLogin: publicProcedure
       .input(
         z.object({
