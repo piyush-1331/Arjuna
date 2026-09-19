@@ -56,18 +56,40 @@ import {
   Truck,
   UserCheck,
   Users,
+  Home,
+  Phone,
+  Shield,
 } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import {
+  isSystemAdmin,
+  MAHARASHTRA_DISTRICTS_REGISTRY,
+} from "@shared/maharashtraLocations";
 
 export default function AdministratorWorkspace() {
   const { user, isAuthenticated } = useAuth();
+  const isSys = isSystemAdmin(user);
+  const [selectedDistrict, setSelectedDistrict] = useState<string>(
+    isSys ? "all" : (user?.district || "Pune")
+  );
+
+  React.useEffect(() => {
+    if (user && !isSystemAdmin(user)) {
+      setSelectedDistrict(user.district || "Pune");
+    }
+  }, [user]);
+
   const [activeTab, setActiveTab] = useState("command_center");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedVillageFilter, setSelectedVillageFilter] = useState("all");
 
+  const effectiveDistrict = selectedDistrict === "all" ? undefined : selectedDistrict;
+
   // Queries
   const utils = trpc.useUtils();
   const overview = trpc.dashboard.overview.useQuery(undefined, { enabled: isAuthenticated });
-  const patients = trpc.patients.list.useQuery({ limit: 100 }, { enabled: isAuthenticated });
+  const patients = trpc.patients.list.useQuery({ limit: 100, district: effectiveDistrict }, { enabled: isAuthenticated });
+  const households = trpc.households.list.useQuery({ district: effectiveDistrict }, { enabled: isAuthenticated });
   const riskDist = trpc.analytics.riskDistribution.useQuery(undefined, { enabled: isAuthenticated });
   const referralAnalytics = trpc.analytics.referrals.useQuery(undefined, { enabled: isAuthenticated });
   const medicineAnalytics = trpc.analytics.medicines.useQuery(undefined, { enabled: isAuthenticated });
@@ -76,10 +98,10 @@ export default function AdministratorWorkspace() {
   const campaigns = trpc.campaigns.list.useQuery(undefined, { enabled: isAuthenticated });
   const followUps = trpc.followUps.list.useQuery(undefined, { enabled: isAuthenticated });
   const notifsQuery = trpc.notifications.list.useQuery(undefined, { enabled: isAuthenticated, staleTime: 10000 });
-  const usersQuery = trpc.admin.listUsers.useQuery(undefined, { enabled: isAuthenticated, staleTime: 15000 });
-  const facilitiesQuery = trpc.facilities.list.useQuery(undefined, { enabled: isAuthenticated, staleTime: 15000 });
+  const usersQuery = trpc.admin.listUsers.useQuery({ district: effectiveDistrict }, { enabled: isAuthenticated, staleTime: 15000 });
+  const facilitiesQuery = trpc.facilities.list.useQuery({ district: effectiveDistrict }, { enabled: isAuthenticated, staleTime: 15000 });
   const districtForecastQuery = trpc.demandForecasting.getDistrictForecasts.useQuery(
-    { district: "Ahmedabad Rural" },
+    { district: effectiveDistrict || "Pune" },
     { enabled: isAuthenticated, staleTime: 30000 }
   );
   const [selectedForecastFacilityId, setSelectedForecastFacilityId] = useState<number | "all">("all");
@@ -108,9 +130,10 @@ export default function AdministratorWorkspace() {
     { id: "command_center", label: "Command Center", icon: Activity },
     { id: "staff_approvals", label: "Staff Approvals & Users", icon: UserCheck, badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : undefined },
     { id: "facilities", label: "Facilities & GIS Map", icon: Hospital, badge: facilitiesQuery.data?.length || undefined },
+    { id: "households", label: "Households & Families", icon: Home, badge: households.data?.length || undefined },
+    { id: "patients", label: isSys ? (selectedDistrict === "all" ? "State Patients" : `${selectedDistrict} Patients`) : `${user?.district || "District"} Patients`, icon: Users, badge: allPatients.length },
     { id: "notifications", label: "Notification Center", icon: Bell, badge: notifsQuery.data?.unreadCount || undefined },
     { id: "village_accessibility", label: "Village Accessibility Scores", icon: Activity },
-    { id: "patients", label: "District Patients", icon: Users, badge: allPatients.length },
     { id: "risk_dist", label: "Risk Distribution", icon: PieChart },
     { id: "referral_analytics", label: "Referral Analytics", icon: Navigation },
     { id: "medicine_analytics", label: "Medicine Analytics", icon: Package, badge: metrics.lowStock > 0 ? metrics.lowStock : undefined },
@@ -153,7 +176,13 @@ export default function AdministratorWorkspace() {
           ? "District Campaign Planning & Beneficiary Oversight"
           : "AI Epidemiological Anomaly Signals"
       }
-      subtitle={user?.name ? `Government of Maharashtra · Health & Family Welfare · ${user.name} (${user.district || "Nandurbar"} Administrator)` : "Government of Maharashtra · Health & Family Welfare Department · District Command Unit"}
+      subtitle={
+        isSys
+          ? "Government of Maharashtra · State Directorate of Health Services · System Administrator"
+          : user?.name
+          ? `Government of Maharashtra · Health & Family Welfare · ${user.name} (${user.district || "Maharashtra"} District Administrator)`
+          : "Government of Maharashtra · Health & Family Welfare Department · District Command Unit"
+      }
       actions={
         activeTab === "command_center" ? (
           <Button onClick={() => toast.success("District Health Digest Report downloaded")} variant="outline" className="rounded-full bg-white text-xs font-semibold">
@@ -162,19 +191,141 @@ export default function AdministratorWorkspace() {
         ) : undefined
       }
     >
+      {/* 0. DISTRICT SCOPE & STATE SWITCHER HEADER */}
+      <div className="rounded-2xl bg-white p-4 shadow-xs border border-slate-200/80 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className={`p-3 rounded-2xl ${isSys ? "bg-purple-100 text-purple-800" : "bg-emerald-100 text-emerald-800"}`}>
+            <Shield className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm sm:text-base font-bold text-slate-900">
+                {isSys
+                  ? (selectedDistrict === "all" ? "State Health Administration (All Maharashtra)" : `${selectedDistrict} District Administration`)
+                  : `${user?.district || "District"} Health Administration`}
+              </h2>
+              <Badge className={isSys ? "bg-purple-100 text-purple-800 border-purple-200" : "bg-emerald-100 text-emerald-800 border-emerald-200"}>
+                {isSys ? "🏛️ State Super Admin" : "📍 District Admin"}
+              </Badge>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {isSys
+                ? "Full State-Wide Authority across all 36 Districts. Use the district selector to focus on specific districts or view all state data."
+                : `Authorized scope strictly locked to ${user?.district || "your district"}. Managing staff approvals, GIS facilities, patients, and health centers for this district.`}
+            </p>
+          </div>
+        </div>
+
+        {/* System Admin District Switcher Dropdown */}
+        {isSys ? (
+          <div className="flex items-center gap-2">
+            <Label className="text-xs font-bold text-slate-700 whitespace-nowrap">Active District:</Label>
+            <select
+              value={selectedDistrict}
+              onChange={(e) => setSelectedDistrict(e.target.value)}
+              className="h-10 rounded-xl bg-slate-50 border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-900 shadow-xs focus:ring-2 focus:ring-purple-500 focus:bg-white"
+            >
+              <option value="all">🏛️ All Maharashtra Districts (36 Districts Overview)</option>
+              {MAHARASHTRA_DISTRICTS_REGISTRY.map((d) => (
+                <option key={d.name} value={d.name}>
+                  📍 {d.name} ({d.division} Division)
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200/80 px-3 py-2 rounded-xl text-emerald-900 text-xs font-semibold">
+            <MapPin className="w-4 h-4 text-emerald-700 shrink-0" />
+            <span>Assigned: <strong>{user?.district || "District"}</strong> (District Scoped)</span>
+          </div>
+        )}
+      </div>
+
       {/* 1. COMMAND CENTER VIEW */}
       {activeTab === "command_center" && (
-        <DistrictCommandCenterView initialDistrict="Ahmedabad Rural" />
+        <DistrictCommandCenterView initialDistrict={selectedDistrict === "all" ? (user?.district || "Pune") : selectedDistrict} />
       )}
 
       {/* STAFF APPROVALS & USER MANAGEMENT VIEW */}
       {activeTab === "staff_approvals" && (
-        <StaffApprovalsManagementView />
+        <StaffApprovalsManagementView selectedDistrict={selectedDistrict} isSystemAdmin={isSys} />
       )}
 
       {/* HEALTHCARE FACILITIES & GIS MAP VIEW */}
       {activeTab === "facilities" && (
-        <FacilitiesManagementView />
+        <FacilitiesManagementView selectedDistrict={selectedDistrict} isSystemAdmin={isSys} />
+      )}
+
+      {/* HOUSEHOLDS & FAMILY MEMBERS VIEW */}
+      {activeTab === "households" && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div>
+              <h3 className="text-base font-bold text-slate-900">
+                {isSys ? (selectedDistrict === "all" ? "State-Wide Households & Families" : `${selectedDistrict} Households & Families`) : `${user?.district || "District"} Households & Families`}
+              </h3>
+              <p className="text-xs text-slate-500">
+                Registered households, family heads, and enrolled family members across villages
+              </p>
+            </div>
+            <Badge variant="outline" className="bg-white text-xs font-semibold px-3 py-1">
+              Total Households: {households.data?.length || 0}
+            </Badge>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {(households.data || []).map((h: any) => (
+              <Card key={h.id} className="border border-slate-200 shadow-xs bg-white rounded-2xl">
+                <CardHeader className="pb-2">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                        <Home className="w-4 h-4 text-teal-600" />
+                        {h.headName}
+                      </CardTitle>
+                      <CardDescription className="text-xs text-slate-500">
+                        📍 {h.village ? `${h.village}, ` : ""}{h.district}
+                      </CardDescription>
+                    </div>
+                    <Badge className="bg-teal-50 text-teal-800 border-teal-200 text-[10px]">
+                      {(h.members || []).length} Members
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="text-xs space-y-2 pt-0">
+                  {h.contact && (
+                    <p className="text-slate-600 flex items-center gap-1">
+                      <Phone className="w-3 h-3 text-slate-400" /> {h.contact}
+                    </p>
+                  )}
+                  <div className="space-y-1 pt-1 border-t border-slate-100">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Family Members</span>
+                    {(h.members && h.members.length > 0) ? (
+                      <div className="space-y-1">
+                        {h.members.map((m: any) => (
+                          <div key={m.id} className="flex items-center justify-between bg-slate-50 rounded-lg p-1.5 px-2">
+                            <span className="font-medium text-slate-800">{m.name}</span>
+                            <span className="text-slate-500 text-[11px]">{m.age}y · {m.gender}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-slate-400 italic text-[11px]">No individual members linked</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {(!households.data || households.data.length === 0) && (
+            <div className="p-8 text-center bg-white rounded-2xl border border-slate-100">
+              <Home className="h-10 w-10 text-slate-300 mx-auto mb-2" />
+              <p className="font-bold text-sm text-slate-700">No households registered in this district</p>
+              <p className="text-xs text-slate-500 mt-1">Households registered by ASHA and CHO workers will appear here.</p>
+            </div>
+          )}
+        </div>
       )}
 
       {/* 2. DISTRICT PATIENTS VIEW */}

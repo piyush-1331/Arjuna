@@ -57,6 +57,8 @@ export interface FacilityMetadata {
 export const SYNTHETIC_TELEMETRY_DISCLAIMER =
   "Simulated/Synthetic Demo Availability — not live tele-telemetry";
 
+import { MAHARASHTRA_HOSPITALS_REGISTRY, type MaharashtraFacilityInfo } from "@shared/maharashtraLocations";
+
 export const REFERRAL_STATUSES = [
   "PENDING",
   "ACCEPTED",
@@ -70,7 +72,7 @@ export const REFERRAL_STATUSES = [
 
 export type ReferralStatus = (typeof REFERRAL_STATUSES)[number];
 
-export const SMART_FACILITIES_REGISTRY: FacilityMetadata[] = [
+const BASE_SMART_FACILITIES: FacilityMetadata[] = [
   {
     id: 1,
     name: "Karanji Budruk Health and Wellness Centre (AAM)",
@@ -1249,6 +1251,77 @@ export const SMART_FACILITIES_REGISTRY: FacilityMetadata[] = [
     },
   },
 ];
+
+function convertMaharashtraFacilityToMetadata(item: MaharashtraFacilityInfo): FacilityMetadata {
+  const is24x7 = item.is24x7 ?? true;
+  const traumaLevel =
+    item.facilityType === "district_hospital" || item.facilityType === "specialist"
+      ? "Level 1 Comprehensive"
+      : item.facilityType === "sub_district_hospital" || item.facilityType === "chc"
+      ? "Level 2 District Trauma"
+      : "Basic Stabilization";
+
+  const facType: FacilityMetadata["facilityType"] =
+    item.facilityType === "sub_district_hospital"
+      ? "district_hospital"
+      : (item.facilityType as FacilityMetadata["facilityType"]);
+
+  return {
+    id: item.id,
+    name: item.name,
+    facilityType: facType,
+    district: item.district,
+    village: item.village,
+    address: item.address,
+    phone: item.phone,
+    latitude: item.latitude,
+    longitude: item.longitude,
+    specialties: item.specialties || ["General Medicine"],
+    capabilities: item.capabilities || ["Emergency Care", "OPD", "Diagnostics"],
+    doctorAvailability: (item.specialties || ["General Medicine"]).slice(0, 3).map((spec, i) => ({
+      specialty: spec,
+      doctorName: `Dr. ${["Kulkarni", "Deshmukh", "Patil", "Shinde", "Joshi", "Chavan", "Pawar"][(item.id + i) % 7]} (Consultant)`,
+      status: i === 0 ? "On-Duty" : "Available",
+      shiftEnd: "18:00",
+    })),
+    emergencyCapability: {
+      is24x7,
+      traumaLevel: traumaLevel as any,
+      totalBeds: item.totalBeds || 50,
+      availableBeds: item.availableBeds || 12,
+      icuAvailable: !!item.icuAvailable,
+      oxygenAvailable: !!item.oxygenAvailable,
+    },
+    appointmentAvailability: {
+      status: (item.availableBeds || 12) > 10 ? "Immediate Slots" : "Available Today",
+      queueLength: Math.max(2, Math.floor(((item.totalBeds || 50) - (item.availableBeds || 12)) / 8)),
+      estimatedWaitMins: Math.max(10, Math.floor(((item.totalBeds || 50) - (item.availableBeds || 12)) / 4)),
+      nextAvailableSlot: "Today, Walk-in",
+    },
+    distanceFromBaseKm: {
+      [item.village || item.district]: 0.8,
+      "Pune City": 15.0,
+      "Mumbai": 30.0,
+      "Karanji Budruk": 140.0,
+    },
+    telemetry: {
+      isSynthetic: true,
+      source: "Maharashtra Public Health Facility Registry",
+      disclaimer: SYNTHETIC_TELEMETRY_DISCLAIMER,
+      lastTelemetrySync: new Date().toISOString(),
+    },
+  };
+}
+
+const convertedMahaFacilities: FacilityMetadata[] = MAHARASHTRA_HOSPITALS_REGISTRY.map(convertMaharashtraFacilityToMetadata);
+
+export const SMART_FACILITIES_REGISTRY: FacilityMetadata[] = [
+  ...BASE_SMART_FACILITIES,
+  ...convertedMahaFacilities.filter(
+    (mf) => !BASE_SMART_FACILITIES.some((bf) => bf.id === mf.id || bf.name.toLowerCase() === mf.name.toLowerCase())
+  ),
+];
+
 
 export interface RecommendationScoreBreakdown {
   specialtyMatch: number;      // 0 - 30 pts

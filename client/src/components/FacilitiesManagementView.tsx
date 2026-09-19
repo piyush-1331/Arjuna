@@ -18,11 +18,14 @@ import {
   X,
   RefreshCw,
   Navigation,
+  Shield,
 } from "lucide-react";
+import { useAuth } from "@/_core/hooks/useAuth";
 import {
   MAHARASHTRA_DISTRICTS,
   getCitiesForDistrict,
   getDistrictCoordinates,
+  isSystemAdmin,
 } from "@shared/maharashtraLocations";
 import HealthcareFacilityMap from "@/components/HealthcareFacilityMap";
 
@@ -43,24 +46,39 @@ const SPECIALTY_OPTIONS = [
   "Radiology & Sonography",
 ];
 
-export function FacilitiesManagementView() {
+export interface FacilitiesManagementViewProps {
+  selectedDistrict?: string;
+  isSystemAdmin?: boolean;
+}
+
+export function FacilitiesManagementView({
+  selectedDistrict = "all",
+  isSystemAdmin: propIsSystemAdmin,
+}: FacilitiesManagementViewProps = {}) {
+  const { user } = useAuth();
+  const isSys = propIsSystemAdmin ?? isSystemAdmin(user);
+  const defaultDistrict = isSys ? (selectedDistrict === "all" ? "Pune" : selectedDistrict) : (user?.district || "Pune");
+  const effectiveDistrict = isSys ? (selectedDistrict === "all" ? undefined : selectedDistrict) : (user?.district || undefined);
+
   const utils = trpc.useUtils();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDistrictFilter, setSelectedDistrictFilter] = useState("all");
   const [selectedTypeFilter, setSelectedTypeFilter] = useState("all");
   const [viewMode, setViewMode] = useState<"directory" | "map">("directory");
 
+  const initialCoords = getDistrictCoordinates(defaultDistrict);
+
   // Add Facility Dialog state
   const [showAddFacilityModal, setShowAddFacilityModal] = useState(false);
   const [facilityForm, setFacilityForm] = useState({
     name: "",
     facilityType: "phc" as "sub_centre" | "phc" | "chc" | "sub_district_hospital" | "district_hospital" | "specialist",
-    district: "Nandurbar",
-    village: "Dhadgaon",
+    district: defaultDistrict,
+    village: getCitiesForDistrict(defaultDistrict)[0] || "",
     address: "",
     phone: "",
-    latitude: 21.3700,
-    longitude: 74.2400,
+    latitude: Number(initialCoords.lat.toFixed(4)),
+    longitude: Number(initialCoords.lng.toFixed(4)),
     specialties: ["General Medicine", "Obstetrics & Gynaecology"] as string[],
     capabilities: ["24x7 Labor Room", "Basic Emergency Care", "Cold Chain Storage"] as string[],
     totalBeds: 20,
@@ -71,9 +89,12 @@ export function FacilitiesManagementView() {
   });
 
   // Queries
-  const facilitiesQuery = trpc.facilities.list.useQuery(undefined, {
-    staleTime: 10000,
-  });
+  const facilitiesQuery = trpc.facilities.list.useQuery(
+    { district: effectiveDistrict },
+    {
+      staleTime: 10000,
+    }
+  );
 
   // Mutation
   const createFacilityMutation = trpc.facilities.create.useMutation({
@@ -515,11 +536,15 @@ export function FacilitiesManagementView() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="font-bold text-slate-700 text-[11px]">District *</label>
+                    <label className="font-bold text-slate-700 text-[11px] flex items-center justify-between">
+                      <span>District *</span>
+                      {!isSys && <span className="text-[10px] text-emerald-700 font-semibold">(Assigned District)</span>}
+                    </label>
                     <select
                       value={facilityForm.district}
+                      disabled={!isSys}
                       onChange={(e) => handleDistrictChange(e.target.value)}
-                      className="mt-1 w-full rounded-xl border border-slate-300 p-2 text-xs bg-white text-slate-900 font-medium"
+                      className="mt-1 w-full rounded-xl border border-slate-300 p-2 text-xs bg-white text-slate-900 font-medium disabled:bg-slate-100 disabled:opacity-80"
                     >
                       {MAHARASHTRA_DISTRICTS.map((dist) => (
                         <option key={dist} value={dist}>

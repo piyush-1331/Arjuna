@@ -399,6 +399,26 @@ export function generateSyntheticMaharashtraConsumptionHistory(): SyntheticMedic
   return history;
 }
 
+import { DISTRICT_ADMIN_ACCOUNTS, SYSTEM_ADMIN_ACCOUNT } from "../shared/maharashtraLocations";
+
+const DISTRICT_ADMIN_DEMO_ACCOUNTS = DISTRICT_ADMIN_ACCOUNTS.map((admin) => ({
+  openId: admin.id,
+  email: admin.email,
+  username: admin.email.split("@")[0],
+  password: admin.password,
+  name: admin.name,
+  role: "administrator" as const,
+  facilityId: 101,
+  facilityName: `${admin.headquarters} District Health Office`,
+  village: admin.headquarters,
+  district: admin.district,
+  phone: admin.phone,
+  designation: admin.isSystemAdmin ? "State Health Director & System Admin" : `${admin.headquarters} District Health Officer (CDHO)`,
+  avatarInitials: admin.name.split(" ").map((n) => n[0]).join("").slice(0, 2),
+  badgeColor: admin.isSystemAdmin ? "bg-amber-600 text-white" : "bg-purple-600 text-white",
+  isSystemAdmin: Boolean(admin.isSystemAdmin),
+}));
+
 /**
  * Predefined demo accounts for SIH evaluation
  */
@@ -500,9 +520,11 @@ export const SYNTHETIC_DEMO_ACCOUNTS = [
     badgeColor: "bg-indigo-600 text-white",
     isHeroPersona: true,
   },
+  ...DISTRICT_ADMIN_DEMO_ACCOUNTS,
 ];
 
 export const DEMO_USERS = SYNTHETIC_DEMO_ACCOUNTS;
 export const MAHARASHTRA_VILLAGES = MAHARASHTRA_VILLAGES_LIST;
 export { MAHARASHTRA_DISTRICTS } from "../shared/maharashtraLocations";
 export const SYNTHETIC_DATA_DISCLAIMER = DEMO_DATA_DISCLAIMER;
+

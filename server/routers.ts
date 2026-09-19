@@ -1,5 +1,5 @@
 import { COOKIE_NAME } from "@shared/const";
-import { getDistrictForCityOrVillage } from "@shared/maharashtraLocations";
+import { getDistrictForCityOrVillage, isSystemAdmin } from "@shared/maharashtraLocations";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, approvedProcedure, careTeamProcedure, doctorProcedure, facilityStaffProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -485,8 +485,17 @@ export const appRouter = router({
     }),
   }),
   households: router({
-    list: protectedProcedure.query(({ ctx }) => hasRole(ctx.user.role, "asha_cho", "facility_staff", "administrator") ? getHouseholds() : []),
-    get: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(({ input, ctx }) => hasRole(ctx.user.role, "asha_cho", "facility_staff", "administrator") ? getHouseholdById(input.id) : undefined),
+    list: protectedProcedure
+      .input(z.object({ district: z.string().optional() }).optional())
+      .query(({ input, ctx }) => {
+        if (!hasRole(ctx.user.role, "asha_cho", "facility_staff", "administrator", "admin")) return [];
+        const isSys = isSystemAdmin(ctx.user);
+        const districtFilter = isSys
+          ? (input?.district === "all" ? undefined : (input?.district || undefined))
+          : (ctx.user.district || undefined);
+        return getHouseholds(districtFilter);
+      }),
+    get: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(({ input, ctx }) => hasRole(ctx.user.role, "asha_cho", "facility_staff", "administrator", "admin") ? getHouseholdById(input.id) : undefined),
     create: protectedProcedure.input(z.object({ headName: z.string().min(2), village: z.string().min(2), district: z.string().default("Ahmedabad Rural"), contact: z.string().optional() })).mutation(async ({ input, ctx }) => {
       if (!canCoordinate(ctx.user.role)) throw new Error("Only ASHA/CHO workers and care-team roles can create households");
       const id = await createHousehold({ ...input, assignedWorkerId: ctx.user.id });
@@ -506,7 +515,10 @@ export const appRouter = router({
           .optional()
       )
       .query(({ input, ctx }) => {
-        const targetDistrict = input?.district || ctx.user.district || undefined;
+        const isSys = isSystemAdmin(ctx.user);
+        const targetDistrict = isSys
+          ? (input?.district === "all" ? undefined : (input?.district || undefined))
+          : (ctx.user.district || undefined);
         const targetVillage =
           ctx.user.role === "asha" || ctx.user.role === "cho"
             ? input?.village || ctx.user.assignedVillage || ctx.user.village || undefined
@@ -2390,6 +2402,18 @@ export const appRouter = router({
           });
         }
 
+        const isSys = isSystemAdmin(ctx.user);
+        if (!isSys && (ctx.user.role === "administrator" || ctx.user.role === "admin") && ctx.user.district) {
+          const userDist = ctx.user.district.toLowerCase();
+          const targetDist = input.district.toLowerCase();
+          if (userDist !== targetDist && !targetDist.includes(userDist) && !userDist.includes(targetDist)) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: `District Administrators can only add health facilities within their assigned district (${ctx.user.district}).`,
+            });
+          }
+        }
+
         const facility = await createFacility(input);
 
         await createAuditEvent({
@@ -2409,8 +2433,12 @@ export const appRouter = router({
 
     list: protectedProcedure
       .input(z.object({ district: z.string().optional() }).optional())
-      .query(async ({ input }) => {
-        const baseList = await getFacilities(input?.district);
+      .query(async ({ input, ctx }) => {
+        const isSys = isSystemAdmin(ctx.user);
+        const effectiveDistrict = isSys
+          ? (input?.district === "all" ? undefined : (input?.district || undefined))
+          : (ctx.user.district || input?.district || undefined);
+        const baseList = await getFacilities(effectiveDistrict);
         const inventory = await getInventory();
         return baseList.map((f) => {
           const facInventory = inventory.filter((m) => m.facilityId === f.id);
@@ -3516,6 +3544,18 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input, ctx }) => {
+        const isSys = isSystemAdmin(ctx.user);
+        if (!isSys && ctx.user.district) {
+          const userDist = ctx.user.district.toLowerCase();
+          const targetDist = input.district.toLowerCase();
+          if (userDist !== targetDist && !targetDist.includes(userDist) && !userDist.includes(targetDist)) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: `District Administrators can only create staff accounts in their assigned district (${ctx.user.district}).`,
+            });
+          }
+        }
+
         const newUser = await createStaffUser(input);
 
         await createAuditEvent({
@@ -3556,9 +3596,20 @@ export const appRouter = router({
           })
           .optional()
       )
-      .query(async ({ input }) => {
-        const users = await listUsers(input);
-        return { users };
+      .query(async ({ input, ctx }) => {
+        const isSys = isSystemAdmin(ctx.user);
+        const effectiveDistrict = isSys
+          ? (input?.district === "all" ? undefined : (input?.district || undefined))
+          : (ctx.user.district || undefined);
+        const users = await listUsers({
+          ...input,
+          district: effectiveDistrict,
+        });
+        return {
+          users,
+          isSystemAdmin: isSys,
+          adminDistrict: ctx.user.district || "All Maharashtra",
+        };
       }),
 
     approveUser: adminProcedure
@@ -3570,6 +3621,17 @@ export const appRouter = router({
         }
         if (target.role === "admin" || target.role === "administrator") {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Administrator account is already active." });
+        }
+        const isSys = isSystemAdmin(ctx.user);
+        if (!isSys && ctx.user.district && target.district) {
+          const userDist = ctx.user.district.toLowerCase();
+          const targetDist = target.district.toLowerCase();
+          if (userDist !== targetDist && !targetDist.includes(userDist) && !userDist.includes(targetDist)) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: `District Administrators can only approve staff requests from their assigned district (${ctx.user.district}).`,
+            });
+          }
         }
         const adminIdent = ctx.user.email || ctx.user.openId || "admin";
         await approveStaffUser(adminIdent, input.userId);
@@ -3618,6 +3680,17 @@ export const appRouter = router({
         if (target.role === "admin" || target.role === "administrator") {
           throw new TRPCError({ code: "FORBIDDEN", message: "The main administrator account cannot be rejected." });
         }
+        const isSys = isSystemAdmin(ctx.user);
+        if (!isSys && ctx.user.district && target.district) {
+          const userDist = ctx.user.district.toLowerCase();
+          const targetDist = target.district.toLowerCase();
+          if (userDist !== targetDist && !targetDist.includes(userDist) && !userDist.includes(targetDist)) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: `District Administrators can only reject staff requests from their assigned district (${ctx.user.district}).`,
+            });
+          }
+        }
         const adminIdent = ctx.user.email || ctx.user.openId || "admin";
         await rejectStaffUser(adminIdent, input.userId, reason.trim());
 
@@ -3652,6 +3725,17 @@ export const appRouter = router({
         if (target.role === "admin" || target.role === "administrator" || target.id === ctx.user.id) {
           throw new TRPCError({ code: "FORBIDDEN", message: "The main administrator account cannot be suspended." });
         }
+        const isSys = isSystemAdmin(ctx.user);
+        if (!isSys && ctx.user.district && target.district) {
+          const userDist = ctx.user.district.toLowerCase();
+          const targetDist = target.district.toLowerCase();
+          if (userDist !== targetDist && !targetDist.includes(userDist) && !userDist.includes(targetDist)) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: `District Administrators can only suspend staff in their assigned district (${ctx.user.district}).`,
+            });
+          }
+        }
         const adminIdent = ctx.user.email || ctx.user.openId || "admin";
         await suspendStaffUser(adminIdent, input.userId);
 
@@ -3682,6 +3766,17 @@ export const appRouter = router({
         const target = await getUserById(input.userId);
         if (!target) {
           throw new TRPCError({ code: "NOT_FOUND", message: "User account not found." });
+        }
+        const isSys = isSystemAdmin(ctx.user);
+        if (!isSys && ctx.user.district && target.district) {
+          const userDist = ctx.user.district.toLowerCase();
+          const targetDist = target.district.toLowerCase();
+          if (userDist !== targetDist && !targetDist.includes(userDist) && !userDist.includes(targetDist)) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: `District Administrators can only reactivate staff in their assigned district (${ctx.user.district}).`,
+            });
+          }
         }
         const adminIdent = ctx.user.email || ctx.user.openId || "admin";
         await reactivateStaffUser(adminIdent, input.userId);

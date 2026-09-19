@@ -226,11 +226,11 @@ describe("Account Status & Post-Login Routing", () => {
 
 describe("Profile Management & Field Immutability Security", () => {
   it("allows user to get their profile details", async () => {
-    const ctx = createMockContext("doctor", "APPROVED", "doctor@example.com", 15);
+    const ctx = createMockContext("doctor", "APPROVED", "doctor@example.com", 9999);
     const caller = appRouter.createCaller(ctx);
 
     const profile = await caller.profile.get();
-    expect(profile.id).toBe(15);
+    expect(profile.id).toBe(9999);
     expect(profile.email).toBe("doctor@example.com");
     expect(profile.role).toBe("doctor");
     expect(profile.status).toBe("APPROVED");
@@ -238,7 +238,7 @@ describe("Profile Management & Field Immutability Security", () => {
   });
 
   it("updates permissible profile demographic and contact fields", async () => {
-    const ctx = createMockContext("doctor", "APPROVED", "doctor@example.com", 15);
+    const ctx = createMockContext("doctor", "APPROVED", "doctor@example.com", 9999);
     const caller = appRouter.createCaller(ctx);
 
     // Mock db.updateUserProfile
@@ -257,7 +257,7 @@ describe("Profile Management & Field Immutability Security", () => {
 
     expect(result.success).toBe(true);
     expect(updateSpy).toHaveBeenCalledWith(
-      15,
+      9999,
       expect.objectContaining({
         name: "Dr. Anita Patel",
         phone: "+91 99999 88888",

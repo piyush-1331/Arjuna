@@ -1449,15 +1449,25 @@ export async function detectOverdueFollowUps() {
   return { overdue, dueSoon, overdueCount: overdue, dueSoonCount: dueSoon };
 }
 
-export async function getHouseholds() {
+export async function getHouseholds(district?: string) {
   if (supabaseDb.isSupabaseDataConfigured()) return supabaseDb.getHouseholds();
   const db = await getDb();
   let list = [...memHouseholds];
   if (db) {
     try {
-      const rows = await db.select().from(households).orderBy(desc(households.createdAt));
+      const rows = district
+        ? await db.select().from(households).where(eq(households.district, district)).orderBy(desc(households.createdAt))
+        : await db.select().from(households).orderBy(desc(households.createdAt));
       if (rows.length) list = rows;
     } catch { /* fallback */ }
+  }
+  if (district && district !== "all") {
+    list = list.filter(
+      h =>
+        h.district?.toLowerCase() === district.toLowerCase() ||
+        (h.district && district.toLowerCase().includes(h.district.toLowerCase())) ||
+        (h.district && h.district.toLowerCase().includes(district.toLowerCase()))
+    );
   }
   const allPatients = await getPatients(200);
   return list.map(h => ({

@@ -43,10 +43,25 @@ import {
   Sparkles,
   Lock,
   UserPlus,
+  Shield,
 } from "lucide-react";
-import { MAHARASHTRA_DISTRICTS, getCitiesForDistrict } from "@shared/maharashtraLocations";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { MAHARASHTRA_DISTRICTS, getCitiesForDistrict, isSystemAdmin } from "@shared/maharashtraLocations";
 
-export function StaffApprovalsManagementView() {
+export interface StaffApprovalsManagementViewProps {
+  selectedDistrict?: string;
+  isSystemAdmin?: boolean;
+}
+
+export function StaffApprovalsManagementView({
+  selectedDistrict = "all",
+  isSystemAdmin: propIsSystemAdmin,
+}: StaffApprovalsManagementViewProps = {}) {
+  const { user } = useAuth();
+  const isSys = propIsSystemAdmin ?? isSystemAdmin(user);
+  const defaultDistrict = isSys ? (selectedDistrict === "all" ? "Pune" : selectedDistrict) : (user?.district || "Pune");
+  const effectiveDistrict = isSys ? (selectedDistrict === "all" ? undefined : selectedDistrict) : (user?.district || undefined);
+
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [roleFilter, setRoleFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -58,7 +73,7 @@ export function StaffApprovalsManagementView() {
     email: "",
     role: "doctor" as "doctor" | "asha" | "cho" | "facility_staff" | "administrator",
     phone: "",
-    district: "Nandurbar",
+    district: defaultDistrict,
     assignedVillage: "",
     employeeId: "",
     designation: "",
@@ -75,9 +90,10 @@ export function StaffApprovalsManagementView() {
   const [suspensionReason, setSuspensionReason] = useState<string>("");
 
   const utils = trpc.useUtils();
-  const usersQuery = trpc.admin.listUsers.useQuery(undefined, {
-    refetchOnWindowFocus: true,
-  });
+  const usersQuery = trpc.admin.listUsers.useQuery(
+    { district: effectiveDistrict },
+    { refetchOnWindowFocus: true }
+  );
 
   const createStaffMutation = trpc.admin.createStaffUser.useMutation({
     onSuccess: (data) => {
@@ -88,7 +104,7 @@ export function StaffApprovalsManagementView() {
         email: "",
         role: "doctor",
         phone: "",
-        district: "Nandurbar",
+        district: defaultDistrict,
         assignedVillage: "",
         employeeId: "",
         designation: "",
@@ -283,6 +299,44 @@ export function StaffApprovalsManagementView() {
 
   return (
     <div className="space-y-6">
+      {/* 0. SCOPE BANNER */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl bg-white p-4 shadow-xs border border-slate-200/80">
+        <div className="flex items-center gap-3">
+          <div className={`p-2.5 rounded-xl ${isSys ? "bg-purple-100 text-purple-800" : "bg-emerald-100 text-emerald-800"}`}>
+            <Shield className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-bold text-slate-900">
+                {isSys ? "State-Wide Staff Directory & Approvals" : `${user?.district || "District"} Staff Directory & Approvals`}
+              </h2>
+              <Badge className={isSys ? "bg-purple-100 text-purple-800 border-purple-200" : "bg-emerald-100 text-emerald-800 border-emerald-200"}>
+                {isSys ? "System Administrator" : "District Administrator"}
+              </Badge>
+            </div>
+            <p className="text-xs text-slate-500">
+              {isSys
+                ? `Full state access — currently viewing: ${selectedDistrict === "all" ? "All 36 Maharashtra Districts" : selectedDistrict}`
+                : `Strictly scoped to ${user?.district || "assigned district"} — you can only view and approve staff in this district.`}
+            </p>
+          </div>
+        </div>
+        <Button
+          onClick={() => {
+            setNewStaffForm((prev) => ({
+              ...prev,
+              district: defaultDistrict,
+              assignedVillage: "",
+            }));
+            setAddStaffDialogOpen(true);
+          }}
+          className="rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs h-9 px-4 gap-2"
+        >
+          <UserPlus className="w-4 h-4" />
+          Add Staff Member
+        </Button>
+      </div>
+
       {/* 1. TOP METRIC SUMMARY CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card className="border-0 shadow-xs bg-white rounded-2xl">
@@ -886,11 +940,15 @@ export function StaffApprovalsManagementView() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700">District (Maharashtra) *</label>
+                <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                  <span>District (Maharashtra) *</span>
+                  {!isSys && <span className="text-[10px] text-emerald-700 font-semibold">(Assigned District)</span>}
+                </label>
                 <select
                   value={newStaffForm.district}
+                  disabled={!isSys}
                   onChange={(e) => setNewStaffForm({ ...newStaffForm, district: e.target.value, assignedVillage: "" })}
-                  className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium focus:bg-white text-slate-900"
+                  className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium focus:bg-white text-slate-900 disabled:opacity-80 disabled:bg-slate-100"
                 >
                   <option value="">Select District</option>
                   {MAHARASHTRA_DISTRICTS.map((dist) => (
