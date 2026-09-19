@@ -98,13 +98,66 @@ export default function CitizenWorkspace() {
   const overview = trpc.dashboard.overview.useQuery(undefined, { enabled: isAuthenticated });
   const patients = trpc.patients.list.useQuery(undefined, { enabled: isAuthenticated });
 
+  // Cache keys based on logged-in user
+  const userKey = user?.id ? String(user.id) : user?.openId || "citizen_local";
+  const APPT_CACHE_KEY = `arjuna.citizen.appointments.${userKey}`;
+  const FAMILY_CACHE_KEY = `arjuna.citizen.family.${userKey}`;
+
+  // Local storage state fallback
+  const [localFamily, setLocalFamily] = useState<any[]>(() => {
+    try {
+      const stored = localStorage.getItem(FAMILY_CACHE_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [localAppts, setLocalAppts] = useState<any[]>(() => {
+    try {
+      const stored = localStorage.getItem(APPT_CACHE_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Keep local storage synced with incoming server data
+  React.useEffect(() => {
+    if (patients.data && patients.data.length > 0) {
+      try {
+        localStorage.setItem(FAMILY_CACHE_KEY, JSON.stringify(patients.data));
+      } catch { /* ignore */ }
+    }
+  }, [patients.data, FAMILY_CACHE_KEY]);
+
+  // Merged family members (server + local cache)
+  const familyMembers = useMemo(() => {
+    const serverList = patients.data || [];
+    const merged = [...serverList];
+    for (const lf of localFamily) {
+      const exists = merged.some(
+        (m) =>
+          (m.id && lf.id && m.id === lf.id) ||
+          (m.name && lf.name && m.name.trim().toLowerCase() === lf.name.trim().toLowerCase())
+      );
+      if (!exists) {
+        merged.push(lf);
+      }
+    }
+    return merged;
+  }, [patients.data, localFamily]);
+
   // Current primary citizen patient or logged in citizen
-  const currentPatient =
-    patients.data?.find(
-      (p) =>
-        (user?.id && p.userId === user.id) ||
-        (user?.name && p.name.toLowerCase() === user.name.toLowerCase())
-    ) || (user?.role === "citizen" ? patients.data?.[0] : patients.data?.[0]);
+  const currentPatient = useMemo(() => {
+    return (
+      familyMembers.find(
+        (p) =>
+          (user?.id && p.userId === user.id) ||
+          (user?.name && p.name && p.name.toLowerCase() === user.name.toLowerCase())
+      ) || (user?.role === "citizen" ? familyMembers[0] : familyMembers[0])
+    );
+  }, [familyMembers, user]);
 
   const visits = trpc.patients.timeline.useQuery(
     { id: currentPatient?.id || 0 },
@@ -119,8 +172,8 @@ export default function CitizenWorkspace() {
     { enabled: Boolean(isAuthenticated && currentPatient?.id) }
   );
   const appointments = trpc.appointments.list.useQuery(
-    currentPatient?.id ? { patientId: currentPatient.id } : undefined,
-    { enabled: Boolean(isAuthenticated && currentPatient?.id) }
+    undefined,
+    { enabled: Boolean(isAuthenticated) }
   );
   const referrals = trpc.referrals.citizenList.useQuery(undefined, { enabled: isAuthenticated });
   const followUps = trpc.followUps.citizenUpcoming.useQuery(undefined, { enabled: isAuthenticated });
@@ -130,6 +183,36 @@ export default function CitizenWorkspace() {
     { patientId: currentPatient?.id || 0 },
     { enabled: Boolean(isAuthenticated && currentPatient?.id) }
   );
+
+  // Sync appointments from server to local storage
+  React.useEffect(() => {
+    if (appointments.data && appointments.data.length > 0) {
+      try {
+        localStorage.setItem(APPT_CACHE_KEY, JSON.stringify(appointments.data));
+      } catch { /* ignore */ }
+    }
+  }, [appointments.data, APPT_CACHE_KEY]);
+
+  // Merged and deduplicated appointments (server + local fallback)
+  const allAppointments = useMemo(() => {
+    const serverList = appointments.data || [];
+    const merged = [...serverList];
+    for (const la of localAppts) {
+      const exists = merged.some(
+        (a) =>
+          (a.id && la.id && a.id === la.id) ||
+          (a.scheduledAt && la.scheduledAt && new Date(a.scheduledAt).getTime() === new Date(la.scheduledAt).getTime())
+      );
+      if (!exists) {
+        merged.push(la);
+      }
+    }
+    return merged.sort((a: any, b: any) => Number(new Date(b.scheduledAt)) - Number(new Date(a.scheduledAt)));
+  }, [appointments.data, localAppts]);
+
+  const upcomingAppointments = useMemo(() => {
+    return allAppointments.filter((a: any) => a.status === "scheduled" || !a.status);
+  }, [allAppointments]);
 
   // Reliable facilities dataset for consultation booking and nearby care
   const facilitiesList = useMemo(() => {
@@ -186,9 +269,16 @@ export default function CitizenWorkspace() {
       createdAt: new Date(),
     };
 
-    let saved = false;
+    // 1. Immediately cache locally
+    try {
+      const updatedLocal = [newApptItem, ...localAppts];
+      setLocalAppts(updatedLocal);
+      localStorage.setItem(APPT_CACHE_KEY, JSON.stringify(updatedLocal));
+    } catch {
+      // LocalStorage non-fatal
+    }
 
-    // 1. Direct Supabase audit/request log if connected
+    // 2. Direct Supabase audit/request log if connected
     if (supabase) {
       try {
         const { data: sessionData } = await supabase.auth.getSession();
@@ -199,34 +289,32 @@ export default function CitizenWorkspace() {
           details: `Appointment (${appointmentForm.type}) requested for ${displayName} at ${facilityObj?.name || "PHC"}`,
           actor_id: authUserId || "citizen",
         });
-        saved = true;
       } catch (sbErr) {
         console.warn("[Supabase] Appointment notice:", sbErr);
       }
     }
 
-    // 2. Persist to server via tRPC
+    // 3. Persist to server via tRPC
     try {
-      await createAppointment.mutateAsync({
+      const res = await createAppointment.mutateAsync({
         patientId: resolvedPatientId,
         facilityId: targetFacilityId,
         scheduledAt: scheduledDate,
         type: appointmentForm.type,
         notes: appointmentForm.notes || undefined,
       });
-      saved = true;
+      if (res?.id) {
+        newApptItem.id = res.id;
+      }
     } catch (trpcErr: any) {
       console.warn("[tRPC] Appointment create notice:", trpcErr?.message);
     }
 
-    // 3. Optimistically update appointments cache
-    utils.appointments.list.setData(
-      currentPatient?.id ? { patientId: currentPatient.id } : undefined,
-      (old: any) => {
-        const prev = Array.isArray(old) ? old : [];
-        return [newApptItem, ...prev];
-      }
-    );
+    // 4. Optimistically update appointments cache
+    utils.appointments.list.setData(undefined, (old: any) => {
+      const prev = Array.isArray(old) ? old : [];
+      return [newApptItem, ...prev];
+    });
 
     await Promise.allSettled([
       utils.appointments.list.invalidate(),
@@ -273,9 +361,16 @@ export default function CitizenWorkspace() {
       updatedAt: new Date(),
     };
 
-    let saved = false;
+    // 1. Immediately cache locally
+    try {
+      const updatedLocal = [...localFamily, newFamilyMemberItem];
+      setLocalFamily(updatedLocal);
+      localStorage.setItem(FAMILY_CACHE_KEY, JSON.stringify(updatedLocal));
+    } catch {
+      // LocalStorage non-fatal
+    }
 
-    // 1. Direct Supabase insert into patients table if connected
+    // 2. Direct Supabase insert into patients table if connected
     if (supabase) {
       try {
         const { data, error } = await supabase.from("patients").insert([
@@ -291,6 +386,7 @@ export default function CitizenWorkspace() {
             blood_group: newFamilyMemberItem.bloodGroup || undefined,
             emergency_contact: newFamilyMemberItem.emergencyContact || undefined,
             household_id: 1,
+            user_id: user?.id ? Number(user.id) : undefined,
             risk_score: 10,
             risk_category: "low",
           },
@@ -298,14 +394,13 @@ export default function CitizenWorkspace() {
 
         if (!error && data) {
           newFamilyMemberItem.id = Number(data.id);
-          saved = true;
         }
       } catch (sbErr) {
         console.warn("[Supabase] Patient insert notice:", sbErr);
       }
     }
 
-    // 2. Persist via tRPC
+    // 3. Persist via tRPC
     try {
       const res = await createFamilyMember.mutateAsync({
         name: familyForm.name.trim(),
@@ -318,13 +413,12 @@ export default function CitizenWorkspace() {
       });
       if (res?.id) {
         newFamilyMemberItem.id = res.id;
-        saved = true;
       }
     } catch (trpcErr: any) {
       console.warn("[tRPC] Patient create notice:", trpcErr?.message);
     }
 
-    // 3. Optimistically update patients query cache
+    // 4. Optimistically update patients query cache
     utils.patients.list.setData(undefined, (old: any) => {
       const prev = Array.isArray(old) ? old : [];
       return [...prev, newFamilyMemberItem];
@@ -384,9 +478,7 @@ export default function CitizenWorkspace() {
   const displayAllergies = user?.allergies || currentPatient?.allergies || "None declared";
   const displayConditions = user?.conditions || currentPatient?.conditions || "None declared";
 
-  const familyMembers = patients.data || [];
   const activePrescriptions = (prescriptions.data || []).filter((p) => p.status === "active");
-  const upcomingAppointments = (appointments.data || []).filter((a) => a.status === "scheduled");
   const citizenReferrals = referrals.data || [];
   const citizenFollowUps = followUps.data || [];
   const upcomingFollowUpsCount = citizenFollowUps.filter((f) => f.isUpcoming).length;
@@ -976,28 +1068,31 @@ export default function CitizenWorkspace() {
               </Button>
             </CardHeader>
             <CardContent className="space-y-3">
-              {(appointments.data || []).length === 0 ? (
+              {allAppointments.length === 0 ? (
                 <div className="rounded-2xl bg-slate-50 p-8 text-center text-slate-400 space-y-2">
                   <Calendar className="h-8 w-8 text-slate-300 mx-auto" />
                   <p className="text-xs font-semibold text-slate-600">No scheduled appointments</p>
                   <p className="text-xs text-slate-400">Click "Book Consultation" to request a doctor visit or checkup.</p>
                 </div>
               ) : (
-                (appointments.data || []).map((a) => (
+                allAppointments.map((a: any) => (
                   <div key={a.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-[#f9fafb] p-4 text-xs">
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-slate-900 text-sm">{a.facilityName}</span>
-                        <Badge variant="outline" className="text-[10px] uppercase">{a.type.replace("_", " ")}</Badge>
+                        <Badge variant="outline" className="text-[10px] uppercase">{(a.type || "general_opd").replace("_", " ")}</Badge>
                       </div>
                       <p className="mt-1 text-slate-500">
                         Scheduled: <strong>{new Date(a.scheduledAt).toLocaleString()}</strong>
                       </p>
+                      {a.patientName && a.patientName !== displayName && (
+                        <p className="mt-0.5 text-slate-500">Patient: <strong className="text-slate-700">{a.patientName}</strong></p>
+                      )}
                       {a.notes && <p className="mt-1 text-slate-600">Reason: {a.notes}</p>}
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge className={a.status === "scheduled" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}>
-                        {a.status}
+                      <Badge className={a.status === "scheduled" || !a.status ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}>
+                        {a.status || "scheduled"}
                       </Badge>
                     </div>
                   </div>

@@ -2155,17 +2155,22 @@ export const appRouter = router({
   appointments: router({
     list: protectedProcedure.input(z.object({ patientId: z.number().int().positive().optional() }).optional()).query(async ({ input, ctx }) => {
       let targetPatientId = input?.patientId;
+      let userPatientIds: number[] = [];
       if (ctx.user.role === "citizen") {
         const userPatients = await getPatientsForUser(ctx.user.id, "citizen");
-        const userPatientId = userPatients[0]?.id;
-        const resolvedId = input?.patientId ?? userPatientId;
-        if (!resolvedId) return [];
-        targetPatientId = resolvedId;
-        await assertPatientAccess(resolvedId, ctx.user.id, ctx.user.role);
+        userPatientIds = userPatients.map(p => p.id);
+        if (targetPatientId) {
+          await assertPatientAccess(targetPatientId, ctx.user.id, ctx.user.role);
+        }
       } else if (targetPatientId) {
         await assertPatientAccess(targetPatientId, ctx.user.id, ctx.user.role);
       }
-      const list = await getAppointments(targetPatientId);
+      let list = await getAppointments(targetPatientId);
+      if (ctx.user.role === "citizen" && !targetPatientId) {
+        if (userPatientIds.length > 0) {
+          list = list.filter(a => userPatientIds.includes(a.patientId));
+        }
+      }
       const patients = await getPatients(100);
       const facilities = await getFacilities();
       return list.map(a => {
@@ -2180,38 +2185,43 @@ export const appRouter = router({
       });
     }),
     create: protectedProcedure.input(z.object({
-      patientId: z.number().int().positive(),
+      patientId: z.number().int().positive().optional(),
       facilityId: z.number().int().optional(),
       scheduledAt: z.coerce.date(),
       type: z.enum(["general_opd", "ncd_followup", "anc_checkup", "teleconsultation", "specialist"]).default("general_opd"),
       notes: z.string().optional(),
     })).mutation(async ({ input, ctx }) => {
       let targetPatientId = input.patientId;
-      try {
-        await assertPatientAccess(input.patientId, ctx.user.id, ctx.user.role);
-      } catch (e) {
-        if (ctx.user.role === "citizen") {
-          const myPatients = await getPatientsForUser(ctx.user.id, ctx.user.role);
-          if (myPatients && myPatients.length > 0) {
+      if (ctx.user.role === "citizen") {
+        const myPatients = await getPatientsForUser(ctx.user.id, ctx.user.role);
+        if (targetPatientId) {
+          const allowed = myPatients.some(p => p.id === targetPatientId);
+          if (!allowed && myPatients.length > 0) {
             targetPatientId = myPatients[0].id;
-          } else {
-            const newPatId = await createPatient({
-              name: ctx.user.name || "Citizen Patient",
-              age: ctx.user.age ?? 30,
-              gender: (ctx.user.gender as any) || "undisclosed",
-              contact: ctx.user.phone || undefined,
-              village: ctx.user.village || "Sundarpur",
-              district: ctx.user.district || "Ahmedabad Rural",
-              userId: ctx.user.id,
-              bloodGroup: ctx.user.bloodGroup || undefined,
-              conditions: ctx.user.conditions || undefined,
-              allergies: ctx.user.allergies || undefined,
-            });
-            targetPatientId = newPatId;
           }
-        } else {
-          throw e;
+        } else if (myPatients.length > 0) {
+          targetPatientId = myPatients[0].id;
         }
+
+        if (!targetPatientId) {
+          const newPatId = await createPatient({
+            name: ctx.user.name || "Citizen Patient",
+            age: ctx.user.age ?? 30,
+            gender: (ctx.user.gender as any) || "undisclosed",
+            contact: ctx.user.phone || undefined,
+            village: ctx.user.village || "Sundarpur",
+            district: ctx.user.district || "Ahmedabad Rural",
+            userId: ctx.user.id,
+            bloodGroup: ctx.user.bloodGroup || undefined,
+            conditions: ctx.user.conditions || undefined,
+            allergies: ctx.user.allergies || undefined,
+          });
+          targetPatientId = newPatId;
+        }
+      } else if (targetPatientId) {
+        await assertPatientAccess(targetPatientId, ctx.user.id, ctx.user.role);
+      } else {
+        targetPatientId = 1;
       }
       const id = await createAppointment({ ...input, patientId: targetPatientId, doctorId: 1, facilityId: input.facilityId ?? 1 });
       await createAuditEvent({

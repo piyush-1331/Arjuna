@@ -112,6 +112,21 @@ function mapReferral(row: any) { return row ? { ...row, id: Number(row.id), pati
 function mapFollowUp(row: any) { return row ? { ...row, id: Number(row.id), patientId: Number(row.patient_id), assignedTo: Number(row.assigned_to), dueAt: date(row.due_at), completedAt: dateOrNull(row.completed_at), createdAt: date(row.created_at) } : undefined; }
 function mapMedicine(row: any) { return row ? { ...row, id: Number(row.id), facilityId: Number(row.facility_id), currentStock: Number(row.current_stock), reorderLevel: Number(row.reorder_level), updatedAt: date(row.updated_at) } : undefined; }
 function mapAlert(row: any) { return row ? { ...row, id: Number(row.id), userId: Number(row.user_id), patientId: row.patient_id == null ? null : Number(row.patient_id), readAt: dateOrNull(row.read_at), createdAt: date(row.created_at) } : undefined; }
+function mapAppointment(row: any) {
+  if (!row) return undefined;
+  return {
+    ...row,
+    id: Number(row.id),
+    patientId: Number(row.patient_id),
+    doctorId: row.doctor_id == null ? null : Number(row.doctor_id),
+    facilityId: row.facility_id == null ? null : Number(row.facility_id),
+    scheduledAt: date(row.scheduled_at),
+    type: row.type || "general_opd",
+    status: row.status || "scheduled",
+    notes: row.notes,
+    createdAt: date(row.created_at),
+  };
+}
 
 async function insertId(table: string, input: Record<string, unknown>) {
   const row = unwrap(await client().from(table).insert(insertPayload(input)).select("id").single()) as { id?: number } | null;
@@ -518,7 +533,44 @@ export async function getPatientsForUser(userId: number, role: string, limit = 5
     query = query.eq("user_id", userId);
   }
   const result = await query;
-  const list = many(unwrap(result)).map(mapPatient);
+  let list = many(unwrap(result)).map(mapPatient);
+
+  // If citizen has no patients linked to their user_id, link matching by name or seed primary patient
+  if (list.length === 0 && role === "citizen") {
+    try {
+      const userRow = await getUserById(userId);
+      if (userRow?.name) {
+        const nameQuery = await client().from("patients").select("*").ilike("name", `%${userRow.name.trim()}%`).limit(10);
+        const nameList = many(unwrap(nameQuery)).map(mapPatient);
+        if (nameList.length > 0) {
+          await client().from("patients").update({ user_id: userId }).eq("id", nameList[0].id);
+          return nameList;
+        }
+
+        // Auto-seed primary patient record for this citizen
+        const newPatRow = await client().from("patients").insert({
+          user_id: userId,
+          name: userRow.name,
+          age: userRow.age || 30,
+          gender: userRow.gender || "undisclosed",
+          contact: userRow.phone || null,
+          village: userRow.village || (userRow as any).assignedVillage || "Sundarpur",
+          district: userRow.district || "Ahmedabad Rural",
+          blood_group: userRow.bloodGroup || null,
+          conditions: userRow.conditions || null,
+          allergies: userRow.allergies || null,
+          emergency_contact: userRow.emergencyContactPhone || userRow.emergencyContactName || userRow.phone || null,
+          risk_score: 10,
+          risk_category: "low",
+        }).select().maybeSingle();
+        const created = unwrap(newPatRow);
+        if (created) return [mapPatient(created)];
+      }
+    } catch {
+      // Ignore background auto-seed errors
+    }
+  }
+
   // Fallback to all if district filter yielded 0 for demo accounts
   if (list.length === 0 && ["doctor", "administrator", "admin", "facility_staff"].includes(role) && targetDistrict) {
     const fallbackRes = await client().from("patients").select("*").order("updated_at", { ascending: false }).limit(limit);
@@ -643,7 +695,35 @@ export async function createAuditEvent(input: Record<string, unknown>) {
     console.warn("[Supabase] createAuditEvent non-fatal warning:", err);
   }
 }
-export async function createPatient(input: Record<string, unknown>) { return insertId("patients", input); }
+export async function createPatient(input: Record<string, unknown>) {
+  try {
+    return await insertId("patients", input);
+  } catch (err) {
+    try {
+      const essential = {
+        name: input.name,
+        age: input.age,
+        gender: input.gender,
+        contact: input.contact,
+        village: input.village,
+        district: input.district,
+        user_id: input.userId,
+        household_id: input.householdId || 1,
+        blood_group: input.bloodGroup,
+        conditions: input.conditions,
+        allergies: input.allergies,
+        emergency_contact: input.emergencyContact,
+        risk_score: input.riskScore ?? 0,
+        risk_category: input.riskCategory || "low",
+      };
+      const row = unwrap(await client().from("patients").insert(insertPayload(essential)).select("id").single()) as { id?: number } | null;
+      if (row?.id) return Number(row.id);
+    } catch (retryErr) {
+      console.warn("[Supabase] createPatient fallback notice:", retryErr);
+    }
+    throw err;
+  }
+}
 export async function createVisit(input: Record<string, unknown>) { return insertId("health_visits", input); }
 export async function createReferral(input: Record<string, unknown>) { return insertId("referrals", input); }
 export async function getReferrals(patientId?: number) {
@@ -679,6 +759,40 @@ export async function cancelFollowUp(id: number, cancellationReason: string) {
   }).eq("id", id));
 }
 export async function updateMedicine(id: number, currentStock: number) { unwrap(await client().from("medicines").update({ current_stock: currentStock, updated_at: new Date().toISOString() }).eq("id", id)); }
+export async function getAppointments(patientId?: number, doctorId?: number) {
+  try {
+    let query = client().from("appointments").select("*").order("scheduled_at", { ascending: true });
+    if (patientId) query = query.eq("patient_id", patientId);
+    if (doctorId) query = query.eq("doctor_id", doctorId);
+    const result = await query;
+    return many(unwrap(result)).map(mapAppointment);
+  } catch (err) {
+    console.warn("[Supabase] getAppointments fallback notice:", err);
+    return [];
+  }
+}
+export async function createAppointment(input: Record<string, unknown>) {
+  try {
+    return await insertId("appointments", input);
+  } catch (err) {
+    try {
+      const essential = {
+        patient_id: input.patientId,
+        doctor_id: input.doctorId || 1,
+        facility_id: input.facilityId || 1,
+        scheduled_at: input.scheduledAt,
+        type: input.type || "general_opd",
+        status: input.status || "scheduled",
+        notes: input.notes,
+      };
+      const row = unwrap(await client().from("appointments").insert(essential).select("id").single()) as { id?: number } | null;
+      if (row?.id) return Number(row.id);
+    } catch (retryErr) {
+      console.warn("[Supabase] createAppointment fallback notice:", retryErr);
+    }
+    throw err;
+  }
+}
 
 export async function seedDemoData() {
   const count: any[] = many(unwrap(await client().from("patients").select("id").limit(1)));

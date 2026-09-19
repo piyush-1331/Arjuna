@@ -1253,7 +1253,12 @@ export async function getPatients(limit = 50) {
 }
 
 export async function getPatientsForUser(userId: number, role: string, limit = 50, targetDistrict?: string, targetVillage?: string) {
-  if (supabaseDb.isSupabaseDataConfigured()) return supabaseDb.getPatientsForUser(userId, role, limit, targetDistrict, targetVillage);
+  if (supabaseDb.isSupabaseDataConfigured()) {
+    try {
+      const res = await supabaseDb.getPatientsForUser(userId, role, limit, targetDistrict, targetVillage);
+      if (res && res.length > 0) return res;
+    } catch { /* fallback */ }
+  }
   const db = await getDb();
   if (db) {
     try {
@@ -1289,7 +1294,40 @@ export async function getPatientsForUser(userId: number, role: string, limit = 5
     }
     return filtered.slice(0, limit);
   }
-  const userPatients = memPatients.filter(p => p.userId === userId);
+  let userPatients = memPatients.filter(p => p.userId === userId);
+  if (userPatients.length === 0) {
+    const u = memUsers.find(user => user.id === userId);
+    if (u?.name) {
+      const matchByName = memPatients.filter(p => p.name.trim().toLowerCase() === u.name.trim().toLowerCase());
+      if (matchByName.length > 0) {
+        matchByName.forEach(p => { p.userId = userId; });
+        return matchByName;
+      }
+      const newPat = {
+        id: memPatients.length + 1,
+        userId,
+        householdId: 1,
+        name: u.name,
+        age: Number(u.age) || 30,
+        gender: u.gender || "female",
+        contact: u.phone || "+91 98221 00000",
+        village: u.village || "Sundarpur",
+        district: u.district || "Ahmedabad Rural",
+        emergencyContact: u.emergencyContactPhone || u.emergencyContactName || u.phone || "+91 98221 00000",
+        bloodGroup: u.bloodGroup || "B+",
+        allergies: u.allergies || "None",
+        conditions: u.conditions || "None",
+        riskScore: 0,
+        riskCategory: "low",
+        abhaId: u.abhaId || `91-8201-${String(userId).padStart(4, "0")}`,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      memPatients.unshift(newPat);
+      return [newPat];
+    }
+    return [];
+  }
   return userPatients;
 }
 
@@ -1799,13 +1837,14 @@ export async function createPatient(input: typeof patients.$inferInsert) {
     throw new Error(`A patient record for "${input.name}" in village "${input.village}" already exists (ID: #${existing.id}). Duplicate registration prevented.`);
   }
 
+  let createdId: number | undefined;
   if (supabaseDb.isSupabaseDataConfigured()) {
     try {
-      return await supabaseDb.createPatient(input);
+      createdId = await supabaseDb.createPatient(input);
     } catch { /* fallback to memory store */ }
   }
 
-  const id = memPatients.length + 1;
+  const id = createdId ?? (memPatients.length + 1);
   const newPatient = {
     id,
     ...input,
@@ -1815,6 +1854,14 @@ export async function createPatient(input: typeof patients.$inferInsert) {
     updatedAt: new Date(),
   };
   memPatients.unshift(newPatient);
+
+  const db = await getDb();
+  if (db) {
+    try {
+      await db.insert(patients).values(input);
+    } catch { /* non-fatal */ }
+  }
+
   return id;
 }
 
@@ -2719,14 +2766,41 @@ export async function dispensePrescription(id: number, dispensedBy: number) {
 }
 
 export async function getAppointments(patientId?: number, doctorId?: number) {
-  let list = [...memAppointments];
+  let list: any[] = [];
+  if (supabaseDb.isSupabaseDataConfigured()) {
+    try {
+      list = await supabaseDb.getAppointments(patientId, doctorId);
+      if (list && list.length > 0) return list;
+    } catch { /* fallback */ }
+  }
+  const db = await getDb();
+  if (db) {
+    try {
+      const conditions = [];
+      if (patientId) conditions.push(eq(appointments.patientId, patientId));
+      if (doctorId) conditions.push(eq(appointments.doctorId, doctorId));
+      const where = conditions.length > 0 ? and(...conditions) : undefined;
+      const rows = await db.select().from(appointments).where(where).orderBy(appointments.scheduledAt);
+      if (rows && rows.length) return rows;
+    } catch { /* fallback */ }
+  }
+  list = [...memAppointments];
   if (patientId) list = list.filter(a => a.patientId === patientId);
   if (doctorId) list = list.filter(a => a.doctorId === doctorId);
   return list.sort((a, b) => Number(new Date(a.scheduledAt)) - Number(new Date(b.scheduledAt)));
 }
 
 export async function createAppointment(input: typeof appointments.$inferInsert) {
-  const id = memAppointments.length + 1;
+  let createdId: number | undefined;
+  if (supabaseDb.isSupabaseDataConfigured()) {
+    try {
+      createdId = await supabaseDb.createAppointment(input as any);
+    } catch (err) {
+      console.warn("[Database] Supabase createAppointment warning:", err);
+    }
+  }
+
+  const id = createdId ?? (memAppointments.length + 1);
   const newAppt = {
     id,
     ...input,
@@ -2735,6 +2809,14 @@ export async function createAppointment(input: typeof appointments.$inferInsert)
     createdAt: new Date(),
   };
   memAppointments.unshift(newAppt);
+
+  const db = await getDb();
+  if (db) {
+    try {
+      await db.insert(appointments).values(input);
+    } catch { /* non-fatal */ }
+  }
+
   return id;
 }
 
@@ -2742,6 +2824,12 @@ export async function updateAppointmentStatus(id: number, status: "scheduled" | 
   const a = memAppointments.find(x => x.id === id);
   if (a) {
     a.status = status;
+  }
+  const db = await getDb();
+  if (db) {
+    try {
+      await db.update(appointments).set({ status }).where(eq(appointments.id, id));
+    } catch { /* non-fatal */ }
   }
   return { success: true };
 }
