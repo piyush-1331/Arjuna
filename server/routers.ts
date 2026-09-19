@@ -2156,8 +2156,9 @@ export const appRouter = router({
     list: protectedProcedure.input(z.object({ patientId: z.number().int().positive().optional() }).optional()).query(async ({ input, ctx }) => {
       let targetPatientId = input?.patientId;
       let userPatientIds: number[] = [];
+      let userPatients: any[] = [];
       if (ctx.user.role === "citizen") {
-        const userPatients = await getPatientsForUser(ctx.user.id, "citizen");
+        userPatients = await getPatientsForUser(ctx.user.id, "citizen");
         userPatientIds = userPatients.map(p => p.id);
         if (targetPatientId) {
           await assertPatientAccess(targetPatientId, ctx.user.id, ctx.user.role);
@@ -2171,15 +2172,15 @@ export const appRouter = router({
           list = list.filter(a => userPatientIds.includes(a.patientId));
         }
       }
-      const patients = await getPatients(100);
+      const allPatients = await getPatients(200);
       const facilities = await getFacilities();
       return list.map(a => {
-        const patient = patients.find(pt => pt.id === a.patientId);
+        const patient = allPatients.find(pt => pt.id === a.patientId) || userPatients.find(pt => pt.id === a.patientId);
         const facility = facilities.find(f => f.id === a.facilityId);
         return {
           ...a,
-          patientName: patient?.name ?? `Patient #${a.patientId}`,
-          village: patient?.village,
+          patientName: patient?.name ?? (ctx.user.name || `Patient #${a.patientId}`),
+          village: patient?.village ?? (ctx.user.village || "Sundarpur"),
           facilityName: facility?.name ?? "Sundarpur Primary Health Centre",
         };
       });

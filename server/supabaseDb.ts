@@ -535,39 +535,58 @@ export async function getPatientsForUser(userId: number, role: string, limit = 5
   const result = await query;
   let list = many(unwrap(result)).map(mapPatient);
 
-  // If citizen has no patients linked to their user_id, link matching by name or seed primary patient
-  if (list.length === 0 && role === "citizen") {
+  // For citizen users, ensure all household members, matching contact, and name records are retrieved
+  if (role === "citizen") {
     try {
       const userRow = await getUserById(userId);
-      if (userRow?.name) {
-        const nameQuery = await client().from("patients").select("*").ilike("name", `%${userRow.name.trim()}%`).limit(10);
-        const nameList = many(unwrap(nameQuery)).map(mapPatient);
-        if (nameList.length > 0) {
-          await client().from("patients").update({ user_id: userId }).eq("id", nameList[0].id);
-          return nameList;
+      if (userRow) {
+        // Find by contact / phone if user has phone
+        if (userRow.phone) {
+          const contactQuery = await client().from("patients").select("*").eq("contact", userRow.phone).limit(20);
+          const contactList = many(unwrap(contactQuery)).map(mapPatient);
+          for (const cp of contactList) {
+            if (!list.some(p => p.id === cp.id)) {
+              list.push(cp);
+              // Auto-link user_id
+              void client().from("patients").update({ user_id: userId }).eq("id", cp.id);
+            }
+          }
         }
 
-        // Auto-seed primary patient record for this citizen
-        const newPatRow = await client().from("patients").insert({
-          user_id: userId,
-          name: userRow.name,
-          age: userRow.age || 30,
-          gender: userRow.gender || "undisclosed",
-          contact: userRow.phone || null,
-          village: userRow.village || (userRow as any).assignedVillage || "Sundarpur",
-          district: userRow.district || "Ahmedabad Rural",
-          blood_group: userRow.bloodGroup || null,
-          conditions: userRow.conditions || null,
-          allergies: userRow.allergies || null,
-          emergency_contact: userRow.emergencyContactPhone || userRow.emergencyContactName || userRow.phone || null,
-          risk_score: 10,
-          risk_category: "low",
-        }).select().maybeSingle();
-        const created = unwrap(newPatRow);
-        if (created) return [mapPatient(created)];
+        // Find by name if list is still empty
+        if (list.length === 0 && userRow.name) {
+          const nameQuery = await client().from("patients").select("*").ilike("name", `%${userRow.name.trim()}%`).limit(10);
+          const nameList = many(unwrap(nameQuery)).map(mapPatient);
+          if (nameList.length > 0) {
+            for (const np of nameList) {
+              list.push(np);
+              void client().from("patients").update({ user_id: userId }).eq("id", np.id);
+            }
+            return list;
+          }
+
+          // Auto-seed primary patient record for this citizen
+          const newPatRow = await client().from("patients").insert({
+            user_id: userId,
+            name: userRow.name,
+            age: userRow.age || 30,
+            gender: userRow.gender || "undisclosed",
+            contact: userRow.phone || null,
+            village: userRow.village || (userRow as any).assignedVillage || "Sundarpur",
+            district: userRow.district || "Ahmedabad Rural",
+            blood_group: userRow.bloodGroup || null,
+            conditions: userRow.conditions || null,
+            allergies: userRow.allergies || null,
+            emergency_contact: userRow.emergencyContactPhone || userRow.emergencyContactName || userRow.phone || null,
+            risk_score: 10,
+            risk_category: "low",
+          }).select().maybeSingle();
+          const created = unwrap(newPatRow);
+          if (created) return [mapPatient(created)];
+        }
       }
     } catch {
-      // Ignore background auto-seed errors
+      // Ignore background auto-link errors
     }
   }
 

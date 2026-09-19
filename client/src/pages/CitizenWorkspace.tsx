@@ -98,10 +98,16 @@ export default function CitizenWorkspace() {
   const overview = trpc.dashboard.overview.useQuery(undefined, { enabled: isAuthenticated });
   const patients = trpc.patients.list.useQuery(undefined, { enabled: isAuthenticated });
 
-  // Cache keys based on logged-in user
-  const userKey = user?.id ? String(user.id) : user?.openId || "citizen_local";
-  const APPT_CACHE_KEY = `arjuna.citizen.appointments.${userKey}`;
-  const FAMILY_CACHE_KEY = `arjuna.citizen.family.${userKey}`;
+  // Stable cache keys based on persistent user identity (email / openId / id)
+  const userEmail = (user?.email || "").toLowerCase().trim();
+  const userOpenId = user?.openId || user?.authId || "";
+  const stableUserKey = useMemo(() => {
+    const raw = userEmail || userOpenId || (user?.id ? `id_${user.id}` : "citizen_local");
+    return raw.toLowerCase().replace(/[^a-z0-9_.-]/g, "_");
+  }, [userEmail, userOpenId, user?.id]);
+
+  const APPT_CACHE_KEY = `arjuna.citizen.appointments.${stableUserKey}`;
+  const FAMILY_CACHE_KEY = `arjuna.citizen.family.${stableUserKey}`;
 
   // Local storage state fallback
   const [localFamily, setLocalFamily] = useState<any[]>(() => {
@@ -122,11 +128,44 @@ export default function CitizenWorkspace() {
     }
   });
 
-  // Keep local storage synced with incoming server data
+  // Re-sync local storage whenever user identity / stableUserKey updates (e.g. after login or meQuery completion)
   React.useEffect(() => {
-    if (patients.data && patients.data.length > 0) {
+    try {
+      const storedFam = localStorage.getItem(FAMILY_CACHE_KEY);
+      if (storedFam) {
+        const parsed = JSON.parse(storedFam);
+        if (Array.isArray(parsed)) setLocalFamily(parsed);
+      }
+      const storedAppt = localStorage.getItem(APPT_CACHE_KEY);
+      if (storedAppt) {
+        const parsed = JSON.parse(storedAppt);
+        if (Array.isArray(parsed)) setLocalAppts(parsed);
+      }
+    } catch (err) {
+      console.warn("[Storage sync error]", err);
+    }
+  }, [FAMILY_CACHE_KEY, APPT_CACHE_KEY]);
+
+  // Keep local storage safely synced with incoming server data without losing locally added entries
+  React.useEffect(() => {
+    if (patients.data && Array.isArray(patients.data)) {
       try {
-        localStorage.setItem(FAMILY_CACHE_KEY, JSON.stringify(patients.data));
+        const currentStored = (() => {
+          try {
+            const raw = localStorage.getItem(FAMILY_CACHE_KEY);
+            return raw ? JSON.parse(raw) : [];
+          } catch { return []; }
+        })();
+        const merged = [...patients.data];
+        for (const loc of currentStored) {
+          const match = merged.some(
+            m => (m.id && loc.id && m.id === loc.id) ||
+                 (m.name && loc.name && m.name.trim().toLowerCase() === loc.name.trim().toLowerCase())
+          );
+          if (!match) merged.push(loc);
+        }
+        localStorage.setItem(FAMILY_CACHE_KEY, JSON.stringify(merged));
+        setLocalFamily(merged);
       } catch { /* ignore */ }
     }
   }, [patients.data, FAMILY_CACHE_KEY]);
@@ -184,11 +223,26 @@ export default function CitizenWorkspace() {
     { enabled: Boolean(isAuthenticated && currentPatient?.id) }
   );
 
-  // Sync appointments from server to local storage
+  // Sync appointments from server into local storage cache safely
   React.useEffect(() => {
-    if (appointments.data && appointments.data.length > 0) {
+    if (appointments.data && Array.isArray(appointments.data)) {
       try {
-        localStorage.setItem(APPT_CACHE_KEY, JSON.stringify(appointments.data));
+        const currentStored = (() => {
+          try {
+            const raw = localStorage.getItem(APPT_CACHE_KEY);
+            return raw ? JSON.parse(raw) : [];
+          } catch { return []; }
+        })();
+        const merged = [...appointments.data];
+        for (const loc of currentStored) {
+          const match = merged.some(
+            m => (m.id && loc.id && m.id === loc.id) ||
+                 (m.scheduledAt && loc.scheduledAt && new Date(m.scheduledAt).getTime() === new Date(loc.scheduledAt).getTime())
+          );
+          if (!match) merged.push(loc);
+        }
+        localStorage.setItem(APPT_CACHE_KEY, JSON.stringify(merged));
+        setLocalAppts(merged);
       } catch { /* ignore */ }
     }
   }, [appointments.data, APPT_CACHE_KEY]);
@@ -271,18 +325,32 @@ export default function CitizenWorkspace() {
 
     // 1. Immediately cache locally
     try {
-      const updatedLocal = [newApptItem, ...localAppts];
+      const updatedLocal = [newApptItem, ...localAppts.filter(a => a.id !== newApptItem.id)];
       setLocalAppts(updatedLocal);
       localStorage.setItem(APPT_CACHE_KEY, JSON.stringify(updatedLocal));
     } catch {
       // LocalStorage non-fatal
     }
 
-    // 2. Direct Supabase audit/request log if connected
+    // 2. Direct Supabase insert & audit log if connected
     if (supabase) {
       try {
         const { data: sessionData } = await supabase.auth.getSession();
         const authUserId = sessionData.session?.user?.id;
+        const { data: sbAppt } = await supabase.from("appointments").insert({
+          patient_id: resolvedPatientId,
+          facility_id: targetFacilityId,
+          doctor_id: 1,
+          scheduled_at: scheduledDate.toISOString(),
+          type: appointmentForm.type,
+          status: "scheduled",
+          notes: appointmentForm.notes || null,
+        }).select("id").maybeSingle();
+
+        if (sbAppt?.id) {
+          newApptItem.id = Number(sbAppt.id);
+        }
+
         await supabase.from("audit_events").insert({
           action: "appointment.requested",
           entity_type: "appointment",
@@ -305,6 +373,9 @@ export default function CitizenWorkspace() {
       });
       if (res?.id) {
         newApptItem.id = res.id;
+        const refreshed = [newApptItem, ...localAppts.filter(a => a.id !== newApptItem.id && a.id !== Date.now())];
+        setLocalAppts(refreshed);
+        try { localStorage.setItem(APPT_CACHE_KEY, JSON.stringify(refreshed)); } catch {}
       }
     } catch (trpcErr: any) {
       console.warn("[tRPC] Appointment create notice:", trpcErr?.message);
@@ -313,7 +384,7 @@ export default function CitizenWorkspace() {
     // 4. Optimistically update appointments cache
     utils.appointments.list.setData(undefined, (old: any) => {
       const prev = Array.isArray(old) ? old : [];
-      return [newApptItem, ...prev];
+      return [newApptItem, ...prev.filter((x: any) => x.id !== newApptItem.id)];
     });
 
     await Promise.allSettled([
@@ -363,7 +434,7 @@ export default function CitizenWorkspace() {
 
     // 1. Immediately cache locally
     try {
-      const updatedLocal = [...localFamily, newFamilyMemberItem];
+      const updatedLocal = [...localFamily.filter(f => f.name.trim().toLowerCase() !== newFamilyMemberItem.name.toLowerCase()), newFamilyMemberItem];
       setLocalFamily(updatedLocal);
       localStorage.setItem(FAMILY_CACHE_KEY, JSON.stringify(updatedLocal));
     } catch {
@@ -413,6 +484,9 @@ export default function CitizenWorkspace() {
       });
       if (res?.id) {
         newFamilyMemberItem.id = res.id;
+        const refreshed = [...localFamily.filter(f => f.name.trim().toLowerCase() !== newFamilyMemberItem.name.toLowerCase()), newFamilyMemberItem];
+        setLocalFamily(refreshed);
+        try { localStorage.setItem(FAMILY_CACHE_KEY, JSON.stringify(refreshed)); } catch {}
       }
     } catch (trpcErr: any) {
       console.warn("[tRPC] Patient create notice:", trpcErr?.message);
@@ -421,7 +495,7 @@ export default function CitizenWorkspace() {
     // 4. Optimistically update patients query cache
     utils.patients.list.setData(undefined, (old: any) => {
       const prev = Array.isArray(old) ? old : [];
-      return [...prev, newFamilyMemberItem];
+      return [...prev.filter((x: any) => x.id !== newFamilyMemberItem.id), newFamilyMemberItem];
     });
 
     await Promise.allSettled([

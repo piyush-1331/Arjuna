@@ -6,6 +6,27 @@ function deriveUserFromSession(session: any) {
   if (!session?.user) return null;
   const u = session.user;
   const meta = u.user_metadata || {};
+  const email = (u.email || "").toLowerCase();
+  const stableKey = email || u.id;
+
+  // Attempt to restore cached user profile for this account
+  if (typeof window !== "undefined") {
+    try {
+      const cached = localStorage.getItem(`arjuna.auth.user_profile.${stableKey}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && (parsed.openId === u.id || (email && parsed.email?.toLowerCase() === email))) {
+          return {
+            ...parsed,
+            lastSignedIn: new Date(),
+          };
+        }
+      }
+    } catch {
+      // Storage parse ignore
+    }
+  }
+
   const role = meta.selected_role || meta.role || "citizen";
   const fullName =
     typeof meta.full_name === "string" && meta.full_name.trim()
@@ -97,6 +118,23 @@ export function useAuth() {
   const fallbackUser = useMemo(() => deriveUserFromSession(session), [session]);
   const user = meQuery.data || fallbackUser;
   const isAuthenticated = Boolean(user && (session || !supabase));
+
+  // Sync fresh user profile data to persistent local cache
+  useEffect(() => {
+    if (meQuery.data && typeof window !== "undefined") {
+      try {
+        const u = meQuery.data;
+        if (u.email) {
+          localStorage.setItem(`arjuna.auth.user_profile.${u.email.toLowerCase()}`, JSON.stringify(u));
+        }
+        if (u.openId) {
+          localStorage.setItem(`arjuna.auth.user_profile.${u.openId}`, JSON.stringify(u));
+        }
+      } catch {
+        // Storage write error ignored
+      }
+    }
+  }, [meQuery.data]);
 
   const logout = useCallback(async () => {
     try {
