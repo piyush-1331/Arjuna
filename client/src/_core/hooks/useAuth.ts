@@ -2,6 +2,7 @@ import { trpc } from "@/lib/trpc";
 import { supabase } from "@/lib/supabase";
 import { useCallback, useEffect, useState, useMemo } from "react";
 import { getDistrictForCityOrVillage, findPredefinedAccount, DISTRICT_ADMIN_ACCOUNTS } from "@shared/maharashtraLocations";
+import { SessionManager } from "@/_core/sessionManager";
 
 function deriveUserFromSession(session: any) {
   const email = (session?.user?.email || "").toLowerCase();
@@ -19,10 +20,15 @@ function deriveUserFromSession(session: any) {
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed && (!u || parsed.openId === u.id || (email && parsed.email?.toLowerCase() === email))) {
+          const resolvedRole = predefined ? predefined.role : (parsed.role || meta.selected_role || meta.role || "citizen");
+          const isStaff = ["doctor", "asha", "cho", "asha_cho", "facility_staff"].includes(String(resolvedRole).toLowerCase());
+          const resolvedStatus = predefined ? "APPROVED" : (parsed.status || meta.status || (isStaff ? "PENDING" : "APPROVED")).toUpperCase();
+          const resolvedDistrict = predefined ? predefined.district : (parsed.district || meta.district || "Pune");
           return {
             ...parsed,
-            district: predefined ? predefined.district : (parsed.district || "Pune"),
-            role: predefined ? predefined.role : (parsed.role || "citizen"),
+            district: resolvedDistrict,
+            role: resolvedRole,
+            status: resolvedStatus,
             lastSignedIn: new Date(),
           };
         }
@@ -75,7 +81,13 @@ function deriveUserFromSession(session: any) {
 
   if (!u) return null;
 
-  const role = meta.selected_role || meta.role || "citizen";
+  const rawRole = String(meta.selected_role || meta.role || "citizen").toLowerCase();
+  const allowedRole = ["citizen", "asha", "cho", "asha_cho", "doctor", "facility_staff", "administrator", "admin"].includes(rawRole)
+    ? rawRole
+    : "citizen";
+  const isStaff = ["doctor", "asha", "cho", "asha_cho", "facility_staff"].includes(allowedRole);
+  const status = (meta.status || (isStaff ? "PENDING" : "APPROVED")).toUpperCase();
+
   const fullName =
     typeof meta.full_name === "string" && meta.full_name.trim()
       ? meta.full_name.trim()
@@ -100,8 +112,8 @@ function deriveUserFromSession(session: any) {
     name: fullName,
     email: u.email ?? null,
     loginMethod: "supabase",
-    role,
-    status: (meta.status || (role === "citizen" || role === "admin" || role === "administrator" ? "APPROVED" : "PENDING")).toUpperCase(),
+    role: allowedRole,
+    status,
     phone: meta.phone ?? null,
     dateOfBirth: meta.date_of_birth ?? null,
     age: meta.age != null && !isNaN(Number(meta.age)) ? Number(meta.age) : null,
@@ -191,8 +203,15 @@ export function useAuth() {
   const user = meQuery.data || fallbackUser;
   const isAuthenticated = Boolean(user && (session || activeEmail || !supabase));
 
-  // Sync fresh user profile data to persistent local cache
+  // Sync fresh user profile data to persistent local cache and SessionManager
   useEffect(() => {
+    if (user) {
+      const isPending = (user as any).status === "PENDING";
+      SessionManager.setStatus(isPending ? "pending_approval" : "authenticated");
+    } else if (!sessionLoading) {
+      SessionManager.setStatus("unauthenticated");
+    }
+
     if (meQuery.data && typeof window !== "undefined") {
       try {
         const u = meQuery.data;
@@ -206,7 +225,7 @@ export function useAuth() {
         // Storage write error ignored
       }
     }
-  }, [meQuery.data]);
+  }, [meQuery.data, user, sessionLoading]);
 
   const logout = useCallback(async () => {
     try {
@@ -223,13 +242,7 @@ export function useAuth() {
       // Ignore server session cleanup failure
     }
 
-    try {
-      localStorage.removeItem("arjuna.pendingRole");
-      localStorage.removeItem("arjuna.auth.active_email");
-      sessionStorage.removeItem("manus-cookie");
-    } catch {
-      // Ignore storage errors
-    }
+    SessionManager.clearSession();
 
     setSession(null);
     setActiveEmail(null);

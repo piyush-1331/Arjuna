@@ -6,53 +6,25 @@ import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
 import { getSupabaseAccessToken } from "./lib/supabase";
+import { SessionManager } from "./_core/sessionManager";
 import "./index.css";
 
 const queryClient = new QueryClient();
 
-const getAppRoot = () => {
-  if (typeof window === "undefined") return "/";
-  const pathname = window.location.pathname.toLowerCase();
-  if (pathname.startsWith("/arjuna")) {
-    return "/Arjuna/";
-  }
-  return "/";
-};
-
-const redirectToLoginIfUnauthorized = (error: unknown) => {
-  if (!(error instanceof TRPCClientError)) return;
+const handleApiSessionError = (error: unknown) => {
   if (typeof window === "undefined") return;
+  if (!(error instanceof TRPCClientError)) return;
 
-  const isUnauthorized = error.message === UNAUTHED_ERR_MSG;
+  const isUnauthorized = error.message === UNAUTHED_ERR_MSG || (error as any)?.data?.code === "UNAUTHORIZED";
   if (!isUnauthorized) return;
 
-  const path = window.location.pathname.toLowerCase();
-  if (
-    path === "/" ||
-    path === "/arjuna" ||
-    path === "/arjuna/" ||
-    path.endsWith("/login") ||
-    path.includes("/profile") ||
-    path.includes("/change-password") ||
-    path.includes("/facilities") ||
-    path.includes("/map") ||
-    path.includes("/pending-approval") ||
-    path.includes("/registration-rejected") ||
-    path.includes("/account-suspended") ||
-    path.includes("/forgot-password") ||
-    path.includes("/reset-password")
-  ) {
-    return;
-  }
-
-  // Use absolute root to prevent relative directory crawling (e.g. /dashboard/citizen -> /dashboard/ 404)
-  window.location.assign(getAppRoot());
+  SessionManager.handleSessionError(error);
 };
 
 queryClient.getQueryCache().subscribe(event => {
   if (event.type === "updated" && event.action.type === "error") {
     const error = event.query.state.error;
-    redirectToLoginIfUnauthorized(error);
+    handleApiSessionError(error);
     console.error("[API Query Error]", error);
   }
 });
@@ -60,7 +32,7 @@ queryClient.getQueryCache().subscribe(event => {
 queryClient.getMutationCache().subscribe(event => {
   if (event.type === "updated" && event.action.type === "error") {
     const error = event.mutation.state.error;
-    redirectToLoginIfUnauthorized(error);
+    handleApiSessionError(error);
     console.error("[API Mutation Error]", error);
   }
 });

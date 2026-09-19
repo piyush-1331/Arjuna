@@ -546,6 +546,13 @@ describe("Administrator RBAC, Invariants & Staff Approval Workflow", () => {
       expect(res.user.name).toBe("Demo ASHA Pune");
       expect(res.user.district).toBe("Pune");
       expect(res.user.status).toBe("APPROVED");
+      expect(res.user.password).toBe("Asha@Arjuna2026");
+
+      // Verify newly created staff member can immediately log in with their predefined password
+      const loggedInStaff = await db.authenticateUser("demo.asha.pune@arjuna.gov.in", "Asha@Arjuna2026");
+      expect(loggedInStaff).toBeDefined();
+      expect(loggedInStaff?.email).toBe("demo.asha.pune@arjuna.gov.in");
+      expect(loggedInStaff?.role).toBe("asha");
     });
 
     it("prevents Pune District Administrator from creating a staff member in another district", async () => {
@@ -562,6 +569,54 @@ describe("Administrator RBAC, Invariants & Staff Approval Workflow", () => {
           assignedVillage: "Shahada",
         })
       ).rejects.toThrow(/District Administrators can only create staff accounts in their assigned district/);
+    });
+
+    it("registers staff member as PENDING in their selected district and routes them to /pending-approval", async () => {
+      const guestCtx = createMockContext("citizen", "APPROVED", "guest@example.com", 999);
+      const caller = appRouter.createCaller(guestCtx);
+
+      const staffEmail = `dr.nashik.test.${Date.now()}@arjuna.gov.in`;
+      const regRes = await caller.auth.register({
+        name: "Dr. Sandeep Kulkarni",
+        email: staffEmail,
+        password: "Doctor@Arjuna2026",
+        role: "doctor",
+        phone: "+91 98223 44556",
+        district: "Nashik",
+        assignedVillage: "Nashik City",
+        facilityName: "Nashik Civil Hospital",
+        designation: "Consultant Physician",
+        registrationNumber: "MMC-2026-88899",
+      });
+
+      expect(regRes.success).toBe(true);
+      expect(regRes.status).toBe("PENDING");
+      expect(regRes.user.role).toBe("doctor");
+      expect(regRes.user.district).toBe("Nashik");
+
+      // Verify routing for this pending staff user
+      const postLoginRoute = getPostLoginRoute(regRes.user.role, regRes.user.status);
+      expect(postLoginRoute).toBe("/pending-approval");
+
+      // Verify Nashik District Administrator can see this pending doctor
+      const nashikAdminCtx = createMockContext("administrator", "APPROVED", "admin.nashik@arjuna.gov.in", 102, "Nashik");
+      const adminCaller = appRouter.createCaller(nashikAdminCtx);
+
+      const usersListRes = await adminCaller.admin.listUsers({ district: "Nashik" });
+      const foundDoctor = usersListRes.users.find((u: any) => u.email === staffEmail);
+      expect(foundDoctor).toBeDefined();
+      expect(foundDoctor.status).toBe("PENDING");
+      expect(foundDoctor.district).toBe("Nashik");
+
+      // Nashik District Admin approves the pending doctor
+      const approveRes = await adminCaller.admin.approveUser({ userId: foundDoctor.id });
+      expect(approveRes.success).toBe(true);
+
+      // Verify doctor is now APPROVED and postLoginRoute is /dashboard/doctor
+      const updatedUser = await db.getUserById(foundDoctor.id);
+      expect(updatedUser?.status).toBe("APPROVED");
+      const postApprovalRoute = getPostLoginRoute(updatedUser!.role, updatedUser!.status);
+      expect(postApprovalRoute).toBe("/dashboard/doctor");
     });
   });
 });

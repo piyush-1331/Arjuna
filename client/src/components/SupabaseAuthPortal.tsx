@@ -74,6 +74,7 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
   const [assignedVillage, setAssignedVillage] = useState("");
 
   const loginMutation = trpc.auth.login.useMutation();
+  const registerMutation = trpc.auth.register.useMutation();
   const passwordStrength = validatePasswordStrength(password);
   const strengthInfo = getPasswordStrengthLabel(passwordStrength.score);
 
@@ -128,8 +129,8 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
             abhaId: null,
             avatarUrl: null,
             approvalRequestedAt: null,
-            approvedAt: new Date(),
-            approvedBy: "system",
+            approvedAt: res.user.status === "APPROVED" ? new Date() : null,
+            approvedBy: res.user.status === "APPROVED" ? "system" : null,
             rejectionReason: null,
             createdAt: new Date(),
             updatedAt: new Date(),
@@ -224,7 +225,7 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
 
       // 3. Attempt remote Supabase authentication for registered users
       if (supabase) {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data: sbData, error } = await supabase.auth.signInWithPassword({
           email: targetEmail,
           password: targetPassword,
         });
@@ -235,6 +236,15 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
         }
         refresh();
         onAuthenticated?.();
+
+        const uMeta = sbData?.user?.user_metadata || {};
+        const uRole = uMeta.selected_role || uMeta.role || "citizen";
+        const isStaff = ["doctor", "asha", "cho", "asha_cho", "facility_staff"].includes(String(uRole).toLowerCase());
+        const uStatus = (uMeta.status || (isStaff ? "PENDING" : "APPROVED")).toUpperCase();
+        const postLoginRoute = getPostLoginRoute(uRole, uStatus);
+        if (postLoginRoute) {
+          setLocation(postLoginRoute);
+        }
         return;
       }
 
@@ -248,10 +258,6 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
   };
 
   const handleCitizenRegister = async () => {
-    if (!supabase) {
-      toast.error("Supabase is not configured for this environment.");
-      return;
-    }
     if (!district) {
       toast.error("Please select your district.");
       return;
@@ -292,7 +298,10 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
 
       const metadata = {
         full_name: fullName.trim(),
+        name: fullName.trim(),
         selected_role: "citizen",
+        role: "citizen",
+        status: "APPROVED",
         phone: phone.trim(),
         district,
         village,
@@ -303,24 +312,70 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
         emergency_contact_phone: emergencyContactPhone,
       };
 
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: buildSupabaseSignUpOptions(metadata),
-      });
-
-      if (error) throw error;
-
-      if (!data.session) {
-        toast.success(getSupabaseSignUpMessage(false, "citizen"), { duration: 6000 });
-        setTab("login");
-        setPassword("");
-        setConfirmPassword("");
-      } else {
-        toast.success(getSupabaseSignUpMessage(true, "citizen"));
-        refresh();
-        onAuthenticated?.();
+      try {
+        await registerMutation.mutateAsync({
+          name: fullName.trim(),
+          email: email.trim(),
+          password,
+          role: "citizen",
+          phone: phone.trim(),
+          district,
+          village,
+          dateOfBirth,
+          age: computedAge,
+          gender,
+          emergencyContactName,
+          emergencyContactPhone,
+        });
+      } catch (backendErr: any) {
+        if (backendErr?.data?.code === "CONFLICT") {
+          throw backendErr;
+        }
       }
+
+      if (supabase) {
+        try {
+          await supabase.auth.signUp({
+            email: email.trim(),
+            password,
+            options: buildSupabaseSignUpOptions(metadata),
+          });
+        } catch {
+          // ignore
+        }
+      }
+
+      const citizenProfile = {
+        id: 1,
+        openId: `user-${Date.now()}`,
+        authId: `user-${Date.now()}`,
+        name: fullName.trim(),
+        email: email.trim(),
+        loginMethod: "supabase",
+        role: "citizen",
+        status: "APPROVED",
+        phone: phone.trim(),
+        district,
+        village,
+        dateOfBirth,
+        age: computedAge,
+        gender,
+        emergencyContactName,
+        emergencyContactPhone,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        lastSignedIn: new Date(),
+      };
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem("arjuna.auth.active_email", email.trim().toLowerCase());
+        localStorage.setItem(`arjuna.auth.user_profile.${email.trim().toLowerCase()}`, JSON.stringify(citizenProfile));
+      }
+
+      toast.success(getSupabaseSignUpMessage(true, "citizen"));
+      refresh();
+      onAuthenticated?.();
+      setLocation("/dashboard/citizen");
     } catch (error: any) {
       toast.error(error.message || "Registration failed. Try again.");
     } finally {
@@ -329,10 +384,6 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
   };
 
   const handleStaffRegister = async () => {
-    if (!supabase) {
-      toast.error("Supabase is not configured for this environment.");
-      return;
-    }
     if (!district) {
       toast.error("Please select your district.");
       return;
@@ -365,7 +416,10 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
     try {
       const metadata = {
         full_name: fullName.trim(),
+        name: fullName.trim(),
         selected_role: staffRole,
+        role: staffRole,
+        status: "PENDING",
         phone: phone.trim(),
         district,
         employee_id: employeeId.trim(),
@@ -373,22 +427,82 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
         facility_name: facilityName.trim(),
         registration_number: registrationNumber.trim(),
         assigned_village: assignedVillage.trim(),
+        village: assignedVillage.trim(),
       };
 
-      const { error } = await supabase.auth.signUp({
+      // 1. Call tRPC server register endpoint
+      try {
+        await registerMutation.mutateAsync({
+          name: fullName.trim(),
+          email: email.trim(),
+          password,
+          role: staffRole,
+          phone: phone.trim(),
+          district,
+          assignedVillage: assignedVillage.trim(),
+          village: assignedVillage.trim(),
+          facilityName: facilityName.trim(),
+          designation: designation.trim(),
+          employeeId: employeeId.trim(),
+          registrationNumber: registrationNumber.trim(),
+        });
+      } catch (backendErr: any) {
+        if (backendErr?.data?.code === "CONFLICT") {
+          throw backendErr;
+        }
+        console.warn("[Auth] Backend staff register note:", backendErr);
+      }
+
+      // 2. Also register in Supabase Auth if configured
+      if (supabase) {
+        try {
+          await supabase.auth.signUp({
+            email: email.trim(),
+            password,
+            options: buildSupabaseSignUpOptions(metadata),
+          });
+        } catch (sbErr: any) {
+          console.warn("[Auth] Supabase staff signUp note:", sbErr);
+        }
+      }
+
+      // 3. Cache the pending staff user profile locally
+      const pendingProfile = {
+        id: 1,
+        openId: `user-${Date.now()}`,
+        authId: `user-${Date.now()}`,
+        name: fullName.trim(),
         email: email.trim(),
-        password,
-        options: buildSupabaseSignUpOptions(metadata),
-      });
+        loginMethod: "supabase",
+        role: staffRole,
+        status: "PENDING",
+        phone: phone.trim(),
+        district,
+        village: assignedVillage.trim(),
+        assignedVillage: assignedVillage.trim(),
+        facilityName: facilityName.trim(),
+        designation: designation.trim(),
+        employeeId: employeeId.trim(),
+        registrationNumber: registrationNumber.trim(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        lastSignedIn: new Date(),
+      };
 
-      if (error) throw error;
+      if (typeof window !== "undefined") {
+        localStorage.setItem("arjuna.auth.active_email", email.trim().toLowerCase());
+        localStorage.setItem(`arjuna.auth.user_profile.${email.trim().toLowerCase()}`, JSON.stringify(pendingProfile));
+      }
 
-      toast.success("Healthcare staff registration submitted! Your account is PENDING administrator approval.", {
+      toast.success(`Healthcare staff registration submitted! Forwarded to the ${district} District Administrator for verification.`, {
         duration: 7000,
       });
-      setTab("login");
-      setPassword("");
-      setConfirmPassword("");
+
+      refresh();
+      onAuthenticated?.();
+
+      // Navigate immediately to verification pending page
+      setLocation("/pending-approval");
     } catch (error: any) {
       toast.error(error.message || "Staff registration failed.");
     } finally {

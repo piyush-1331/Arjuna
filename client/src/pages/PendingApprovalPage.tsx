@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import SupabaseAuthPortal from "@/components/SupabaseAuthPortal";
 import ProfileDropdownMenu from "@/components/ProfileDropdownMenu";
@@ -16,17 +16,22 @@ import {
   MapPin,
   Phone,
   RefreshCw,
+  Shield,
   ShieldAlert,
+  ShieldCheck,
+  Stethoscope,
   User,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { getDistrictForCityOrVillage } from "@shared/maharashtraLocations";
+import { getPostLoginRoute } from "@shared/authFlow";
+import { toast } from "sonner";
 
 const roleDisplayNames: Record<string, string> = {
   citizen: "Citizen",
   asha: "ASHA Worker",
   cho: "Community Health Officer (CHO)",
-  asha_cho: "ASHA / CHO worker",
+  asha_cho: "ASHA / CHO Worker",
   doctor: "Doctor / Medical Officer",
   facility_staff: "Facility Staff / Pharmacist",
   administrator: "Administrator",
@@ -36,11 +41,15 @@ const roleDisplayNames: Record<string, string> = {
 export default function PendingApprovalPage() {
   const { user, isAuthenticated, loading, logout, refresh } = useAuth();
   const [, setLocation] = useLocation();
+  const [checking, setChecking] = useState(false);
 
   if (loading) {
     return (
-      <div className="min-h-screen grid place-items-center bg-[#f3f5f8]">
-        <RefreshCw className="h-6 w-6 animate-spin text-slate-500" />
+      <div className="min-h-screen grid place-items-center bg-[#f3f5f8] text-[#15181b]">
+        <div className="flex flex-col items-center gap-3">
+          <RefreshCw className="h-6 w-6 animate-spin text-slate-500" />
+          <p className="text-xs font-semibold text-slate-500">Checking verification status...</p>
+        </div>
       </div>
     );
   }
@@ -51,9 +60,40 @@ export default function PendingApprovalPage() {
 
   // If approved, redirect to proper dashboard
   if (user.status === "APPROVED") {
-    setLocation(`/dashboard/${user.role}`);
+    const targetRoute = getPostLoginRoute(user.role, "APPROVED");
+    if (targetRoute) {
+      setLocation(targetRoute);
+      return null;
+    }
+  }
+
+  if (user.status === "REJECTED") {
+    setLocation("/registration-rejected");
     return null;
   }
+
+  if (user.status === "SUSPENDED") {
+    setLocation("/account-suspended");
+    return null;
+  }
+
+  const resolvedDistrict =
+    user.district ||
+    (user.village ? getDistrictForCityOrVillage(user.village) : null) ||
+    (user.assignedVillage ? getDistrictForCityOrVillage(user.assignedVillage) : null) ||
+    "Pune";
+
+  const handleCheckStatus = async () => {
+    setChecking(true);
+    try {
+      await refresh();
+      toast.info(`Status refreshed. Registration is under active review by the ${resolvedDistrict} District Administrator.`);
+    } catch {
+      toast.error("Failed to refresh status. Please try again.");
+    } finally {
+      setChecking(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#f3f5f8] text-[#15181b] flex flex-col antialiased selection:bg-[#6c9db9]/20">
@@ -72,7 +112,7 @@ export default function PendingApprovalPage() {
                 <span className="display-font text-base font-extrabold tracking-tight">Arjuna</span>
                 <span className="rounded-md bg-[#15181b] px-1.5 py-0.5 text-[10px] font-bold text-white uppercase">AI</span>
               </div>
-              <p className="text-[11px] font-medium text-slate-500">Registration Verification</p>
+              <p className="text-[11px] font-medium text-slate-500">Registration Verification Console</p>
             </div>
           </div>
 
@@ -83,7 +123,7 @@ export default function PendingApprovalPage() {
       </header>
 
       {/* Main Status Container */}
-      <main className="mx-auto max-w-2xl w-full flex-1 p-4 sm:p-6 sm:py-12 flex flex-col justify-center">
+      <main className="mx-auto max-w-2xl w-full flex-1 p-4 sm:p-6 sm:py-10 flex flex-col justify-center">
         <Card className="border border-black/10 bg-white shadow-2xl rounded-3xl overflow-hidden text-center">
           <CardHeader className="p-6 sm:p-10 pb-4">
             <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-3xl bg-amber-50 text-amber-600 border border-amber-200 shadow-sm animate-pulse">
@@ -97,18 +137,37 @@ export default function PendingApprovalPage() {
             </div>
 
             <CardTitle className="display-font text-2xl font-extrabold text-slate-900">
-              Your registration is pending approval.
+              Registration Sent to {resolvedDistrict} District Administrator
             </CardTitle>
             <CardDescription className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto mt-2 leading-relaxed">
-              A district health administrator is reviewing your application and professional credentials. You will be able to access the clinical care workspace as soon as your account is approved.
+              Your healthcare staff credentials have been submitted and forwarded to the <strong>{resolvedDistrict} District Health Administration</strong>. You will receive immediate clinical care workspace access upon administrator approval.
             </CardDescription>
           </CardHeader>
 
           <CardContent className="p-6 sm:p-10 pt-2 space-y-6 text-left">
+            {/* Reviewing Authority Card */}
+            <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4 space-y-2.5">
+              <div className="flex items-center gap-2 text-indigo-900 font-bold text-xs">
+                <Building2 className="h-4 w-4 text-indigo-600 shrink-0" />
+                <span>Assigned Review Authority</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs text-indigo-950">
+                <div>
+                  <span className="text-indigo-600/80 font-medium">District Health Office:</span>
+                  <p className="font-bold">{resolvedDistrict} District Health Administration</p>
+                </div>
+                <div>
+                  <span className="text-indigo-600/80 font-medium">Reviewing Administrator:</span>
+                  <p className="font-bold">admin.{resolvedDistrict.toLowerCase().replace(/[^a-z]/g, "")}@arjuna.gov.in</p>
+                </div>
+              </div>
+            </div>
+
             {/* Applicant Summary */}
             <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-5 space-y-3.5">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                Submitted Application Details
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                <span>Submitted Application Details</span>
+                <span className="text-[10px] font-medium text-slate-500 lowercase">arjuna care network</span>
               </h3>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
@@ -148,7 +207,7 @@ export default function PendingApprovalPage() {
 
                 <div>
                   <span className="text-slate-500">District:</span>
-                  <p className="font-bold text-slate-800">{user.district || (user.village ? getDistrictForCityOrVillage(user.village) : null) || (user.assignedVillage ? getDistrictForCityOrVillage(user.assignedVillage) : null) || "Pune"}</p>
+                  <p className="font-bold text-slate-800">{resolvedDistrict}</p>
                 </div>
 
                 {user.facilityName && (
@@ -158,10 +217,10 @@ export default function PendingApprovalPage() {
                   </div>
                 )}
 
-                {user.assignedVillage && (
+                {(user.assignedVillage || user.village) && (
                   <div>
-                    <span className="text-slate-500">Assigned Village:</span>
-                    <p className="font-bold text-slate-800">{user.assignedVillage}</p>
+                    <span className="text-slate-500">Assigned City / Village:</span>
+                    <p className="font-bold text-slate-800">{user.assignedVillage || user.village}</p>
                   </div>
                 )}
 
@@ -177,19 +236,21 @@ export default function PendingApprovalPage() {
             {/* Action buttons */}
             <div className="flex flex-col sm:flex-row gap-3 pt-2">
               <Button
-                onClick={() => refresh()}
-                className="flex-1 rounded-2xl bg-[#15181b] hover:bg-slate-800 text-white font-bold text-xs h-11 gap-2"
+                onClick={handleCheckStatus}
+                disabled={checking}
+                className="flex-1 rounded-2xl bg-[#15181b] hover:bg-slate-800 text-white font-bold text-xs h-11 gap-2 shadow-sm"
               >
-                <RefreshCw className="h-4 w-4" />
-                <span>Check Approval Status</span>
+                <RefreshCw className={`h-4 w-4 ${checking ? "animate-spin" : ""}`} />
+                <span>{checking ? "Checking Approval..." : "Check Approval Status"}</span>
               </Button>
 
               <Button
                 variant="outline"
-                onClick={() => setLocation("/profile")}
-                className="flex-1 rounded-2xl border-slate-200 text-slate-700 font-bold text-xs h-11"
+                onClick={() => logout()}
+                className="flex-1 rounded-2xl border-slate-200 text-slate-700 hover:bg-slate-100 font-bold text-xs h-11 gap-2"
               >
-                View Profile Details
+                <LogOut className="h-4 w-4 text-slate-500" />
+                <span>Log Out / Switch User</span>
               </Button>
             </div>
           </CardContent>

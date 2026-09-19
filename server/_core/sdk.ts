@@ -8,7 +8,7 @@ import type { User } from "../../drizzle/schema";
 import * as db from "../db";
 import { ENV } from "./env";
 import { getSupabaseAuthUser } from "../supabase";
-import { findPredefinedAccount } from "../../shared/maharashtraLocations";
+import { findPredefinedAccount, getDistrictForCityOrVillage } from "../../shared/maharashtraLocations";
 import type {
   ExchangeTokenRequest,
   ExchangeTokenResponse,
@@ -166,13 +166,13 @@ class SDKServer {
    */
   async createSessionToken(
     openId: string,
-    options: { expiresInMs?: number; name?: string } = {}
+    options: { name?: string; expiresInMs?: number } = {}
   ): Promise<string> {
     return this.signSession(
       {
         openId,
-        appId: ENV.appId,
-        name: options.name || "",
+        appId: ENV.appId || "arjuna-app",
+        name: options.name || "Care Member",
       },
       options
     );
@@ -189,8 +189,8 @@ class SDKServer {
 
     return new SignJWT({
       openId: payload.openId,
-      appId: payload.appId,
-      name: payload.name,
+      appId: payload.appId || ENV.appId || "arjuna-app",
+      name: payload.name || "Care Member",
     })
       .setProtectedHeader({ alg: "HS256", typ: "JWT" })
       .setExpirationTime(expirationSeconds)
@@ -201,7 +201,6 @@ class SDKServer {
     cookieValue: string | undefined | null
   ): Promise<{ openId: string; appId: string; name: string } | null> {
     if (!cookieValue) {
-      console.warn("[Auth] Missing session cookie");
       return null;
     }
 
@@ -211,23 +210,29 @@ class SDKServer {
         algorithms: ["HS256"],
       });
       const { openId, appId, name } = payload as Record<string, unknown>;
+      const resolvedOpenId = isNonEmptyString(openId)
+        ? openId
+        : typeof payload.sub === "string" && payload.sub.length > 0
+        ? payload.sub
+        : null;
 
-      if (
-        !isNonEmptyString(openId) ||
-        !isNonEmptyString(appId) ||
-        !isNonEmptyString(name)
-      ) {
-        console.warn("[Auth] Session payload missing required fields");
+      if (!resolvedOpenId) {
         return null;
       }
 
+      const resolvedAppId = isNonEmptyString(appId) ? appId : ENV.appId || "arjuna-app";
+      const resolvedName = isNonEmptyString(name)
+        ? name
+        : typeof (payload as any).email === "string"
+        ? (payload as any).email
+        : "Care Member";
+
       return {
-        openId,
-        appId,
-        name,
+        openId: resolvedOpenId,
+        appId: resolvedAppId,
+        name: resolvedName,
       };
-    } catch (error) {
-      console.warn("[Auth] Session verification failed", String(error));
+    } catch {
       return null;
     }
   }
@@ -307,10 +312,19 @@ class SDKServer {
       }
 
       // New user initial synchronization from Supabase signup metadata
-      const metadataRole = supabaseUser.user_metadata?.selected_role || supabaseUser.user_metadata?.role;
-      const allowedRole = ["citizen", "asha", "cho", "asha_cho", "doctor", "facility_staff", "administrator", "admin"].includes(String(metadataRole))
-        ? (String(metadataRole) as any)
+      const rawMetadataRole = supabaseUser.user_metadata?.selected_role || supabaseUser.user_metadata?.role;
+      const allowedRole = ["citizen", "asha", "cho", "asha_cho", "doctor", "facility_staff", "administrator", "admin"].includes(String(rawMetadataRole))
+        ? (String(rawMetadataRole) as any)
         : "citizen";
+      const isStaff = ["doctor", "asha", "cho", "asha_cho", "facility_staff"].includes(allowedRole);
+      const rawMetaStatus = supabaseUser.user_metadata?.status;
+      const targetStatus = String(rawMetaStatus || (isStaff ? "PENDING" : "APPROVED")).toUpperCase();
+      const targetDistrict =
+        (supabaseUser.user_metadata?.district as string) ||
+        (supabaseUser.user_metadata?.village ? getDistrictForCityOrVillage(supabaseUser.user_metadata.village as string) : null) ||
+        (supabaseUser.user_metadata?.assigned_village ? getDistrictForCityOrVillage(supabaseUser.user_metadata.assigned_village as string) : null) ||
+        "Pune";
+
       const fullName =
         typeof supabaseUser.user_metadata?.full_name === "string" && supabaseUser.user_metadata.full_name.trim()
           ? supabaseUser.user_metadata.full_name.trim()
@@ -342,9 +356,10 @@ class SDKServer {
           email: supabaseUser.email ?? null,
           loginMethod: "supabase",
           role: allowedRole,
+          status: targetStatus,
           phone: (supabaseUser.user_metadata?.phone as string) ?? null,
-          district: (supabaseUser.user_metadata?.district as string) ?? null,
-          village: (supabaseUser.user_metadata?.village as string) ?? null,
+          district: targetDistrict,
+          village: (supabaseUser.user_metadata?.village as string) ?? (supabaseUser.user_metadata?.assigned_village as string) ?? null,
           dateOfBirth: (supabaseUser.user_metadata?.date_of_birth as string) ?? null,
           age: computedAge,
           gender: (supabaseUser.user_metadata?.gender as string) ?? null,
@@ -352,7 +367,7 @@ class SDKServer {
           designation: (supabaseUser.user_metadata?.designation as string) ?? null,
           employeeId: (supabaseUser.user_metadata?.employee_id as string) ?? null,
           registrationNumber: (supabaseUser.user_metadata?.registration_number as string) ?? null,
-          assignedVillage: (supabaseUser.user_metadata?.assigned_village as string) ?? null,
+          assignedVillage: (supabaseUser.user_metadata?.assigned_village as string) ?? (supabaseUser.user_metadata?.village as string) ?? null,
           emergencyContactName: (supabaseUser.user_metadata?.emergency_contact_name as string) ?? null,
           emergencyContactPhone: (supabaseUser.user_metadata?.emergency_contact_phone as string) ?? null,
           bloodGroup: (supabaseUser.user_metadata?.blood_group as string) ?? null,
@@ -376,19 +391,19 @@ class SDKServer {
           email: supabaseUser.email ?? null,
           loginMethod: "supabase",
           role: allowedRole,
-          status: "APPROVED",
+          status: targetStatus,
           phone: (supabaseUser.user_metadata?.phone as string) ?? null,
           dateOfBirth: (supabaseUser.user_metadata?.date_of_birth as string) ?? null,
           age: computedAge,
           gender: (supabaseUser.user_metadata?.gender as string) ?? null,
-          village: (supabaseUser.user_metadata?.village as string) ?? null,
-          district: (supabaseUser.user_metadata?.district as string) ?? "Ahmedabad Rural",
+          village: (supabaseUser.user_metadata?.village as string) ?? (supabaseUser.user_metadata?.assigned_village as string) ?? null,
+          district: targetDistrict,
           facilityId: null,
-          facilityName: null,
-          designation: null,
-          employeeId: null,
-          registrationNumber: null,
-          assignedVillage: null,
+          facilityName: (supabaseUser.user_metadata?.facility_name as string) ?? null,
+          designation: (supabaseUser.user_metadata?.designation as string) ?? null,
+          employeeId: (supabaseUser.user_metadata?.employee_id as string) ?? null,
+          registrationNumber: (supabaseUser.user_metadata?.registration_number as string) ?? null,
+          assignedVillage: (supabaseUser.user_metadata?.assigned_village as string) ?? (supabaseUser.user_metadata?.village as string) ?? null,
           emergencyContactName: (supabaseUser.user_metadata?.emergency_contact_name as string) ?? null,
           emergencyContactPhone: (supabaseUser.user_metadata?.emergency_contact_phone as string) ?? null,
           bloodGroup: (supabaseUser.user_metadata?.blood_group as string) ?? null,

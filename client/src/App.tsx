@@ -4,6 +4,7 @@ import NotFound from "@/pages/NotFound";
 import { Router as WouterRouter, Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import SessionManagerModal from "./components/SessionManagerModal";
 import LoginPage from "@/pages/LoginPage";
 import RoleDashboard from "@/pages/RoleDashboard";
 import CitizenDashboard from "@/pages/CitizenDashboard";
@@ -101,6 +102,7 @@ function App() {
       <ThemeProvider defaultTheme="light">
         <TooltipProvider>
           <Toaster />
+          <SessionManagerModal />
           <WouterRouter base={base}>
             <AppRoutes />
           </WouterRouter>

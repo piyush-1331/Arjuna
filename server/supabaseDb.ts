@@ -1,5 +1,31 @@
 import type { InsertUser } from "../drizzle/schema";
 import { isSupabaseConfigured, supabaseAdmin } from "./supabase";
+import { createHash, randomUUID } from "crypto";
+
+export function toValidUuid(val: string | null | undefined): string {
+  if (!val) return randomUUID();
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const looseUuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (uuidRegex.test(val) || looseUuidRegex.test(val)) {
+    return val;
+  }
+  const hash = createHash("md5").update(val).digest("hex");
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+}
+
+export function isMissingColumnError(error: any): boolean {
+  if (!error) return false;
+  const msg = (error.message || String(error)).toLowerCase();
+  const code = (error.code || "").toString();
+  return (
+    code === "PGRST204" ||
+    code === "42703" ||
+    msg.includes("does not exist") ||
+    msg.includes("schema cache") ||
+    msg.includes("could not find the") ||
+    msg.includes("column")
+  );
+}
 
 const client = () => {
   if (!supabaseAdmin) throw new Error("Supabase server client is not configured");
@@ -20,21 +46,38 @@ const many = <T = any>(rows: any): T[] => {
 export function mapUser(row: any, meta?: any) {
   if (!row) return undefined;
   const m = meta || {};
+  const rawRole = String(row.role || m.selected_role || m.role || "citizen").toLowerCase();
+  const allowedRole = ["citizen", "asha", "cho", "asha_cho", "doctor", "facility_staff", "administrator", "admin"].includes(rawRole)
+    ? rawRole
+    : "citizen";
+  const isStaff = ["doctor", "asha", "cho", "asha_cho", "facility_staff"].includes(allowedRole);
+
+  let rawStatus = row.status || m.status;
+  if (!rawStatus) {
+    rawStatus = isStaff ? "PENDING" : "APPROVED";
+  }
+  const status = String(rawStatus).toUpperCase();
+
+  const district =
+    row.district ||
+    m.district ||
+    null;
+
   return {
-    id: Number(row.id),
+    id: Number(row.id || (row.open_id ? Math.abs(row.open_id.split("").reduce((acc: number, c: string) => (acc << 5) - acc + c.charCodeAt(0), 0)) % 100000 : 1)),
     openId: row.open_id || row.auth_id || String(row.id),
     authId: row.auth_id || row.open_id,
-    name: row.name || m.full_name || m.name || "Care Member",
+    name: row.name || m.full_name || m.name || (row.email ? row.email.split("@")[0] : "Care Member"),
     email: row.email || m.email || null,
     loginMethod: row.login_method || m.login_method || "supabase",
-    role: row.role || m.selected_role || "citizen",
-    status: (row.status || "APPROVED").toUpperCase(),
+    role: allowedRole,
+    status,
     phone: row.phone || m.phone || null,
     dateOfBirth: row.date_of_birth || m.date_of_birth || null,
     age: (row.age != null && !isNaN(Number(row.age)) ? Number(row.age) : null) ?? (m.age != null && !isNaN(Number(m.age)) ? Number(m.age) : null),
     gender: row.gender || m.gender || null,
     village: row.village || m.village || null,
-    district: row.district || m.district || null,
+    district,
     facilityId: row.facility_id == null ? null : Number(row.facility_id),
     facilityName: row.facility_name || m.facility_name || null,
     designation: row.designation || m.designation || null,
@@ -50,13 +93,13 @@ export function mapUser(row: any, meta?: any) {
     pincode: row.pincode || m.pincode || null,
     abhaId: row.abha_id || m.abha_id || null,
     avatarUrl: row.avatar_url || m.avatar_url || null,
-    approvalRequestedAt: dateOrNull(row.approval_requested_at),
-    approvedAt: dateOrNull(row.approved_at),
-    approvedBy: row.approved_by,
-    rejectionReason: row.rejection_reason,
-    createdAt: date(row.created_at),
-    updatedAt: date(row.updated_at),
-    lastSignedIn: date(row.last_signed_in),
+    approvalRequestedAt: dateOrNull(row.approval_requested_at || row.approvalRequestedAt),
+    approvedAt: dateOrNull(row.approved_at || row.approvedAt),
+    approvedBy: row.approved_by || row.approvedBy,
+    rejectionReason: row.rejection_reason || row.rejectionReason,
+    createdAt: date(row.created_at || row.createdAt),
+    updatedAt: date(row.updated_at || row.updatedAt),
+    lastSignedIn: date(row.last_signed_in || row.lastSignedIn),
   } as any;
 }
 
@@ -151,9 +194,12 @@ function insertPayload(input: Record<string, unknown>) {
 export function isSupabaseDataConfigured() { return isSupabaseConfigured; }
 
 export async function upsertUser(user: Record<string, any>): Promise<void> {
+  const safeOpenId = toValidUuid(user.openId);
+  const safeAuthId = toValidUuid(user.authId || user.openId);
+
   let existing: any = null;
   try {
-    const existingRes = await client().from("profiles").select("*").eq("open_id", user.openId).maybeSingle();
+    const existingRes = await client().from("profiles").select("*").eq("open_id", safeOpenId).maybeSingle();
     existing = existingRes.data;
   } catch {
     existing = null;
@@ -177,9 +223,28 @@ export async function upsertUser(user: Record<string, any>): Promise<void> {
     targetStatus = "PENDING";
   }
 
+  // Also sync to Supabase Auth user metadata if supabaseAdmin is configured
+  if (supabaseAdmin && (user.authId || user.openId)) {
+    try {
+      const rawId = user.authId || user.openId;
+      await supabaseAdmin.auth.admin.updateUserById(rawId, {
+        user_metadata: {
+          role: targetRole,
+          selected_role: targetRole,
+          status: targetStatus,
+          district: user.district || existing?.district,
+          name: user.name || existing?.name,
+          phone: user.phone || existing?.phone,
+        }
+      });
+    } catch {
+      // Ignore if auth user doesn't exist
+    }
+  }
+
   const fullPayload = insertPayload({
-    openId: user.openId,
-    authId: user.authId || user.openId,
+    openId: safeOpenId,
+    authId: safeAuthId,
     name: user.name !== undefined ? user.name : (existing?.name ?? null),
     email: user.email !== undefined ? user.email : (existing?.email ?? null),
     loginMethod: user.loginMethod !== undefined ? user.loginMethod : (existing?.login_method ?? null),
@@ -215,10 +280,10 @@ export async function upsertUser(user: Record<string, any>): Promise<void> {
 
   const { error } = await client().from("profiles").upsert(fullPayload, { onConflict: "open_id" });
   if (error) {
-    if (error.message.includes("does not exist") || (error as any).code === "PGRST204" || (error as any).code === "42703") {
+    if (isMissingColumnError(error)) {
       const corePayload = insertPayload({
-        openId: user.openId,
-        authId: user.authId || user.openId,
+        openId: safeOpenId,
+        authId: safeAuthId,
         name: user.name !== undefined ? user.name : (existing?.name ?? null),
         email: user.email !== undefined ? user.email : (existing?.email ?? null),
         loginMethod: user.loginMethod !== undefined ? user.loginMethod : (existing?.login_method ?? null),
@@ -228,7 +293,17 @@ export async function upsertUser(user: Record<string, any>): Promise<void> {
         lastSignedIn: user.lastSignedIn ?? new Date(),
       });
       const retryRes = await client().from("profiles").upsert(corePayload, { onConflict: "open_id" });
-      if (retryRes.error) throw new Error(retryRes.error.message);
+      if (retryRes.error) {
+        if (isMissingColumnError(retryRes.error)) {
+          await client().from("profiles").upsert({
+            open_id: safeOpenId,
+            name: user.name || "Care Member",
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "open_id" });
+          return;
+        }
+        throw new Error(retryRes.error.message);
+      }
       return;
     }
     throw new Error(error.message);
@@ -241,8 +316,14 @@ export async function updateUserRole(userId: number, role: string) {
 }
 
 export async function getUserByOpenId(openId: string, preloadedMeta?: any) {
+  const safeOpenId = toValidUuid(openId);
   try {
-    const row = unwrap(await client().from("profiles").select("*").eq("open_id", openId).maybeSingle());
+    const rowRes = await client().from("profiles").select("*").eq("open_id", safeOpenId).maybeSingle();
+    let row = rowRes.data;
+    if (!row && safeOpenId !== openId) {
+      const altRes = await client().from("profiles").select("*").eq("open_id", openId).maybeSingle();
+      row = altRes.data;
+    }
     if (row) {
       let meta = preloadedMeta;
       if (!meta && supabaseAdmin && (row.auth_id || row.open_id)) {
@@ -315,13 +396,17 @@ export async function listUsers(filter?: { role?: string; status?: string; distr
   const rows = many(unwrap(await query));
 
   const metaMap = new Map<string, any>();
+  const authUsers: any[] = [];
   if (supabaseAdmin) {
     try {
       const { data: authList } = await supabaseAdmin.auth.admin.listUsers();
       if (authList?.users) {
         for (const u of authList.users) {
-          if (u.id && u.user_metadata) {
-            metaMap.set(u.id, u.user_metadata);
+          if (u.id) {
+            authUsers.push(u);
+            if (u.user_metadata) {
+              metaMap.set(u.id, u.user_metadata);
+            }
           }
         }
       }
@@ -330,13 +415,81 @@ export async function listUsers(filter?: { role?: string; status?: string; distr
     }
   }
 
-  let result = rows.map((r) => mapUser(r, metaMap.get(r.auth_id || r.open_id)));
-  if (filter?.status && filter.status !== "all") {
-    result = result.filter(u => (u.status || "APPROVED").toUpperCase() === filter.status?.toUpperCase());
+  const existingKeys = new Set<string>();
+  const result: any[] = [];
+
+  for (const r of rows) {
+    const mapped = mapUser(r, metaMap.get(r.auth_id || r.open_id));
+    if (mapped) {
+      const key = (mapped.email || mapped.openId || `profile-${mapped.id}`).toLowerCase();
+      existingKeys.add(key);
+      if (mapped.openId) existingKeys.add(mapped.openId.toLowerCase());
+      if (mapped.authId) existingKeys.add(mapped.authId.toLowerCase());
+      result.push(mapped);
+    }
+  }
+
+  // Synthesize newly registered Supabase Auth users not yet persisted to profiles table
+  for (const u of authUsers) {
+    const uEmail = (u.email || "").toLowerCase();
+    const uId = (u.id || "").toLowerCase();
+    if (existingKeys.has(uEmail) || existingKeys.has(uId)) continue;
+
+    const meta = u.user_metadata || {};
+    const rawRole = String(meta.selected_role || meta.role || "citizen").toLowerCase();
+    const role = ["citizen", "asha", "cho", "asha_cho", "doctor", "facility_staff", "administrator", "admin"].includes(rawRole)
+      ? rawRole
+      : "citizen";
+    const isStaff = ["doctor", "asha", "cho", "asha_cho", "facility_staff"].includes(role);
+    const status = (meta.status || (isStaff ? "PENDING" : "APPROVED")).toUpperCase();
+    const district = meta.district || null;
+
+    const synthUser = mapUser({
+      id: Math.abs(uId.split("").reduce((acc: number, c: string) => (acc << 5) - acc + c.charCodeAt(0), 0)) % 100000 || 9999,
+      open_id: u.id,
+      auth_id: u.id,
+      name: meta.full_name || meta.name || (u.email ? u.email.split("@")[0] : "Staff Member"),
+      email: u.email,
+      role,
+      status,
+      district,
+      village: meta.village || meta.assigned_village || null,
+      facility_name: meta.facility_name || null,
+      designation: meta.designation || null,
+      employee_id: meta.employee_id || null,
+      registration_number: meta.registration_number || null,
+      assigned_village: meta.assigned_village || null,
+      phone: meta.phone || null,
+      created_at: u.created_at,
+      updated_at: u.updated_at,
+    }, meta);
+
+    if (synthUser) {
+      existingKeys.add(uEmail);
+      existingKeys.add(uId);
+      result.push(synthUser);
+    }
+  }
+
+  let filtered = result;
+  if (filter?.role && filter.role !== "all" && filter.role !== "ALL") {
+    const rLower = filter.role.toLowerCase();
+    filtered = filtered.filter(u => (u.role || "").toLowerCase() === rLower);
+  }
+  if (filter?.district && filter.district !== "all" && filter.district !== "ALL") {
+    const dLower = filter.district.toLowerCase();
+    filtered = filtered.filter(u => {
+      const uDist = (u.district || "").toLowerCase();
+      return uDist === dLower || uDist.includes(dLower) || dLower.includes(uDist);
+    });
+  }
+  if (filter?.status && filter.status !== "all" && filter.status !== "ALL") {
+    const sUpper = filter.status.toUpperCase();
+    filtered = filtered.filter(u => (u.status || "APPROVED").toUpperCase() === sUpper);
   }
   if (filter?.search) {
     const q = filter.search.toLowerCase();
-    result = result.filter(u => 
+    filtered = filtered.filter(u => 
       u.name?.toLowerCase().includes(q) ||
       u.email?.toLowerCase().includes(q) ||
       u.phone?.toLowerCase().includes(q) ||
@@ -344,11 +497,36 @@ export async function listUsers(filter?: { role?: string; status?: string; distr
       u.registrationNumber?.toLowerCase().includes(q)
     );
   }
-  return result;
+  return filtered;
 }
 
 export async function approveStaffUser(adminIdentifier: string, userId: number) {
   const now = new Date().toISOString();
+  let targetAuthId: string | null = null;
+  try {
+    const existing = unwrap(await client().from("profiles").select("auth_id, open_id").eq("id", userId).maybeSingle());
+    if (existing) {
+      targetAuthId = existing.auth_id || existing.open_id;
+    }
+  } catch {
+    // Ignore
+  }
+
+  if (targetAuthId && supabaseAdmin) {
+    try {
+      await supabaseAdmin.auth.admin.updateUserById(targetAuthId, {
+        user_metadata: {
+          status: "APPROVED",
+          approved_at: now,
+          approved_by: adminIdentifier,
+          rejection_reason: null,
+        },
+      });
+    } catch {
+      // Ignore
+    }
+  }
+
   const { error } = await client().from("profiles").update({
     status: "APPROVED",
     approved_at: now,
@@ -356,9 +534,14 @@ export async function approveStaffUser(adminIdentifier: string, userId: number) 
     rejection_reason: null,
     updated_at: now,
   }).eq("id", userId);
+
   if (error) {
-    if (error.message.includes("does not exist")) {
-      await client().from("profiles").update({ updated_at: now }).eq("id", userId);
+    if (isMissingColumnError(error)) {
+      try {
+        await client().from("profiles").update({ updated_at: now }).eq("id", userId);
+      } catch {
+        // Safe fallback
+      }
       return;
     }
     throw new Error(error.message);
@@ -367,15 +550,44 @@ export async function approveStaffUser(adminIdentifier: string, userId: number) 
 
 export async function rejectStaffUser(adminIdentifier: string, userId: number, reason: string) {
   const now = new Date().toISOString();
+  let targetAuthId: string | null = null;
+  try {
+    const existing = unwrap(await client().from("profiles").select("auth_id, open_id").eq("id", userId).maybeSingle());
+    if (existing) {
+      targetAuthId = existing.auth_id || existing.open_id;
+    }
+  } catch {
+    // Ignore
+  }
+
+  if (targetAuthId && supabaseAdmin) {
+    try {
+      await supabaseAdmin.auth.admin.updateUserById(targetAuthId, {
+        user_metadata: {
+          status: "REJECTED",
+          rejection_reason: reason,
+          approved_by: adminIdentifier,
+        },
+      });
+    } catch {
+      // Ignore
+    }
+  }
+
   const { error } = await client().from("profiles").update({
     status: "REJECTED",
     rejection_reason: reason,
     approved_by: adminIdentifier,
     updated_at: now,
   }).eq("id", userId);
+
   if (error) {
-    if (error.message.includes("does not exist")) {
-      await client().from("profiles").update({ updated_at: now }).eq("id", userId);
+    if (isMissingColumnError(error)) {
+      try {
+        await client().from("profiles").update({ updated_at: now }).eq("id", userId);
+      } catch {
+        // Safe fallback
+      }
       return;
     }
     throw new Error(error.message);
@@ -384,13 +596,40 @@ export async function rejectStaffUser(adminIdentifier: string, userId: number, r
 
 export async function suspendStaffUser(adminIdentifier: string, userId: number) {
   const now = new Date().toISOString();
+  let targetAuthId: string | null = null;
+  try {
+    const existing = unwrap(await client().from("profiles").select("auth_id, open_id").eq("id", userId).maybeSingle());
+    if (existing) {
+      targetAuthId = existing.auth_id || existing.open_id;
+    }
+  } catch {
+    // Ignore
+  }
+
+  if (targetAuthId && supabaseAdmin) {
+    try {
+      await supabaseAdmin.auth.admin.updateUserById(targetAuthId, {
+        user_metadata: {
+          status: "SUSPENDED",
+        },
+      });
+    } catch {
+      // Ignore
+    }
+  }
+
   const { error } = await client().from("profiles").update({
     status: "SUSPENDED",
     updated_at: now,
   }).eq("id", userId);
+
   if (error) {
-    if (error.message.includes("does not exist")) {
-      await client().from("profiles").update({ updated_at: now }).eq("id", userId);
+    if (isMissingColumnError(error)) {
+      try {
+        await client().from("profiles").update({ updated_at: now }).eq("id", userId);
+      } catch {
+        // Safe fallback
+      }
       return;
     }
     throw new Error(error.message);
@@ -399,13 +638,40 @@ export async function suspendStaffUser(adminIdentifier: string, userId: number) 
 
 export async function reactivateStaffUser(adminIdentifier: string, userId: number) {
   const now = new Date().toISOString();
+  let targetAuthId: string | null = null;
+  try {
+    const existing = unwrap(await client().from("profiles").select("auth_id, open_id").eq("id", userId).maybeSingle());
+    if (existing) {
+      targetAuthId = existing.auth_id || existing.open_id;
+    }
+  } catch {
+    // Ignore
+  }
+
+  if (targetAuthId && supabaseAdmin) {
+    try {
+      await supabaseAdmin.auth.admin.updateUserById(targetAuthId, {
+        user_metadata: {
+          status: "APPROVED",
+        },
+      });
+    } catch {
+      // Ignore
+    }
+  }
+
   const { error } = await client().from("profiles").update({
     status: "APPROVED",
     updated_at: now,
   }).eq("id", userId);
+
   if (error) {
-    if (error.message.includes("does not exist")) {
-      await client().from("profiles").update({ updated_at: now }).eq("id", userId);
+    if (isMissingColumnError(error)) {
+      try {
+        await client().from("profiles").update({ updated_at: now }).eq("id", userId);
+      } catch {
+        // Safe fallback
+      }
       return;
     }
     throw new Error(error.message);
@@ -612,8 +878,12 @@ export async function markOverdueFollowUps() {
   return overdue.length;
 }
 
-export async function getHouseholds() {
-  const list = many(unwrap(await client().from("households").select("*").order("created_at", { ascending: false }))).map(mapHousehold);
+export async function getHouseholds(district?: string) {
+  let query = client().from("households").select("*").order("created_at", { ascending: false });
+  if (district && district !== "all") {
+    query = query.eq("district", district);
+  }
+  const list = many(unwrap(await query)).map(mapHousehold);
   const allPatients = await getPatients(200);
   return list.map(h => ({
     ...h,

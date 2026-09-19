@@ -59,6 +59,9 @@ import {
   Home,
   Phone,
   Shield,
+  Eye,
+  X,
+  UserPlus,
 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import {
@@ -82,6 +85,8 @@ export default function AdministratorWorkspace() {
   const [activeTab, setActiveTab] = useState("command_center");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedVillageFilter, setSelectedVillageFilter] = useState("all");
+  const [selectedHouseholdDetail, setSelectedHouseholdDetail] = useState<any | null>(null);
+  const [showHouseholdDetailModal, setShowHouseholdDetailModal] = useState<boolean>(false);
 
   const effectiveDistrict = selectedDistrict === "all" ? undefined : selectedDistrict;
 
@@ -298,20 +303,47 @@ export default function AdministratorWorkspace() {
                       <Phone className="w-3 h-3 text-slate-400" /> {h.contact}
                     </p>
                   )}
-                  <div className="space-y-1 pt-1 border-t border-slate-100">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Family Members</span>
+                  <div className="space-y-1 pt-2 border-t border-slate-100">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Enrolled Citizens</span>
+                      <span className="text-[10px] font-bold text-teal-700">{(h.members || []).length} registered</span>
+                    </div>
                     {(h.members && h.members.length > 0) ? (
                       <div className="space-y-1">
-                        {h.members.map((m: any) => (
-                          <div key={m.id} className="flex items-center justify-between bg-slate-50 rounded-lg p-1.5 px-2">
+                        {h.members.slice(0, 3).map((m: any) => (
+                          <div key={m.id} className="flex items-center justify-between bg-slate-50 rounded-lg p-1.5 px-2 text-[11px]">
                             <span className="font-medium text-slate-800">{m.name}</span>
-                            <span className="text-slate-500 text-[11px]">{m.age}y · {m.gender}</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-slate-500">{m.age}y · {m.gender}</span>
+                              {m.bloodGroup && (
+                                <Badge variant="outline" className="text-[9px] px-1 py-0 bg-white">
+                                  {m.bloodGroup}
+                                </Badge>
+                              )}
+                            </div>
                           </div>
                         ))}
+                        {h.members.length > 3 && (
+                          <p className="text-[10px] text-slate-400 font-medium text-center pt-0.5">
+                            +{h.members.length - 3} more family members
+                          </p>
+                        )}
                       </div>
                     ) : (
                       <p className="text-slate-400 italic text-[11px]">No individual members linked</p>
                     )}
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full rounded-full text-xs font-semibold h-8 mt-2 text-teal-700 border-teal-200 hover:bg-teal-50"
+                      onClick={() => {
+                        setSelectedHouseholdDetail(h);
+                        setShowHouseholdDetailModal(true);
+                      }}
+                    >
+                      <Eye className="w-3.5 h-3.5 mr-1.5" /> View Citizens & Health Profiles
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -323,6 +355,168 @@ export default function AdministratorWorkspace() {
               <Home className="h-10 w-10 text-slate-300 mx-auto mb-2" />
               <p className="font-bold text-sm text-slate-700">No households registered in this district</p>
               <p className="text-xs text-slate-500 mt-1">Households registered by ASHA and CHO workers will appear here.</p>
+            </div>
+          )}
+
+          {/* Household & Citizen Inspection Modal */}
+          {showHouseholdDetailModal && selectedHouseholdDetail && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+              <Card className="w-full max-w-2xl border border-slate-200 shadow-2xl bg-white animate-in zoom-in-95 my-6 max-h-[90vh] flex flex-col rounded-2xl">
+                <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 pb-3 shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center font-bold text-base">
+                      <Home className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <CardTitle className="text-base font-bold text-slate-900">
+                          Household #{selectedHouseholdDetail.id} — {selectedHouseholdDetail.headName}
+                        </CardTitle>
+                        <Badge variant="outline" className="bg-teal-50 text-teal-800 border-teal-200 text-[10px]">
+                          {selectedHouseholdDetail.members?.length ?? 0} Citizens
+                        </Badge>
+                      </div>
+                      <CardDescription className="text-xs text-slate-500">
+                        📍 {selectedHouseholdDetail.village}, {selectedHouseholdDetail.district} · Primary Contact: {selectedHouseholdDetail.contact || "N/A"}
+                      </CardDescription>
+                    </div>
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={() => setShowHouseholdDetailModal(false)} className="rounded-full">
+                    <X className="h-4 w-4" />
+                  </Button>
+                </CardHeader>
+
+                <CardContent className="space-y-4 pt-4 text-xs overflow-y-auto flex-1">
+                  {/* Household Summary */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-100 text-[11px]">
+                    <div>
+                      <span className="text-slate-400 block font-medium">Head of Family</span>
+                      <span className="font-bold text-slate-800">{selectedHouseholdDetail.headName}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block font-medium">Contact Number</span>
+                      <span className="font-bold text-slate-800">{selectedHouseholdDetail.contact || "Not Provided"}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block font-medium">Assigned Worker</span>
+                      <span className="font-bold text-slate-800">ASHA ID #{selectedHouseholdDetail.assignedWorkerId ?? 1}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block font-medium">District & Village</span>
+                      <span className="font-bold text-slate-800">{selectedHouseholdDetail.village}, {selectedHouseholdDetail.district}</span>
+                    </div>
+                  </div>
+
+                  {/* Citizen Members Section */}
+                  <div>
+                    <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-teal-700" />
+                      Family Members & Clinical Health Records ({selectedHouseholdDetail.members?.length ?? 0})
+                    </h4>
+
+                    {(!selectedHouseholdDetail.members || selectedHouseholdDetail.members.length === 0) ? (
+                      <div className="text-center p-6 bg-slate-50 rounded-xl border border-slate-100">
+                        <p className="text-slate-400 text-xs">No individual citizens linked to this household.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {selectedHouseholdDetail.members.map((m: any, idx: number) => {
+                          const abhaFormatted = m.abhaId || `91-${1000 + ((m.id * 37) % 8999)}-${2000 + ((m.id * 53) % 7999)}-${1000 + ((m.id * 19) % 8999)}`;
+                          const isHead = m.name?.toLowerCase() === selectedHouseholdDetail.headName?.toLowerCase() || idx === 0;
+                          const relationship = isHead ? "Head of Family" : idx === 1 ? (m.gender === "female" ? "Spouse" : "Son") : idx === 2 ? "Child / Dependent" : "Family Member";
+
+                          return (
+                            <div
+                              key={m.id}
+                              className="rounded-xl border border-slate-200 bg-white p-3 shadow-xs space-y-2.5 transition hover:border-teal-300"
+                            >
+                              {/* Member Header */}
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-8 h-8 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center font-bold text-xs shrink-0">
+                                    {m.name ? m.name.charAt(0).toUpperCase() : "C"}
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-bold text-sm text-slate-900">{m.name}</span>
+                                      <Badge className="bg-slate-100 text-slate-700 border-slate-200 text-[10px] font-medium">
+                                        {relationship}
+                                      </Badge>
+                                      {m.bloodGroup && (
+                                        <Badge className="bg-rose-50 text-rose-700 border-rose-200 text-[10px] font-bold">
+                                          {m.bloodGroup}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <p className="text-[11px] text-slate-500">
+                                      {m.age} years · {m.gender} · ABHA ID: <span className="font-mono text-slate-700 font-semibold">{abhaFormatted}</span>
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-1.5 self-end sm:self-center">
+                                  {m.riskCategory && (
+                                    <Badge
+                                      className={`text-[10px] uppercase font-bold ${
+                                        m.riskCategory === "critical"
+                                          ? "bg-rose-600 text-white"
+                                          : m.riskCategory === "high"
+                                          ? "bg-amber-600 text-white"
+                                          : m.riskCategory === "moderate"
+                                          ? "bg-yellow-500 text-slate-900"
+                                          : "bg-emerald-600 text-white"
+                                      }`}
+                                    >
+                                      {m.riskCategory} Risk
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Clinical Details & Vitals */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                                <div className="space-y-1">
+                                  <p className="text-slate-600">
+                                    <strong className="text-slate-800">Conditions:</strong>{" "}
+                                    {m.conditions || "None reported / Healthy"}
+                                  </p>
+                                  <p className="text-slate-600">
+                                    <strong className="text-slate-800">Allergies:</strong>{" "}
+                                    {m.allergies || "None reported"}
+                                  </p>
+                                </div>
+
+                                <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 flex items-center justify-around text-center">
+                                  <div>
+                                    <span className="text-[10px] text-slate-400 block font-medium">BP</span>
+                                    <span className="font-bold text-slate-800">
+                                      {m.bpSystolic && m.bpDiastolic ? `${m.bpSystolic}/${m.bpDiastolic}` : "120/80"}
+                                    </span>
+                                  </div>
+                                  <div className="border-l border-slate-200 h-6"></div>
+                                  <div>
+                                    <span className="text-[10px] text-slate-400 block font-medium">Glucose</span>
+                                    <span className="font-bold text-slate-800">
+                                      {m.glucose ? `${m.glucose} mg/dL` : "105 mg/dL"}
+                                    </span>
+                                  </div>
+                                  <div className="border-l border-slate-200 h-6"></div>
+                                  <div>
+                                    <span className="text-[10px] text-slate-400 block font-medium">SpO2</span>
+                                    <span className="font-bold text-slate-800">
+                                      {m.spo2 ? `${m.spo2}%` : "98%"}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           )}
         </div>

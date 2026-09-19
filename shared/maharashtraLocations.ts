@@ -550,6 +550,29 @@ export function isSystemAdmin(user?: { email?: string | null; district?: string 
 }
 
 /**
+ * Standard predefined default passwords for roles when created manually by administrators
+ */
+export function getDefaultRolePassword(role?: string): string {
+  switch (role) {
+    case "doctor":
+      return "Doctor@Arjuna2026";
+    case "asha":
+      return "Asha@Arjuna2026";
+    case "cho":
+      return "Cho@Arjuna2026";
+    case "facility_staff":
+      return "Staff@Arjuna2026";
+    case "administrator":
+    case "admin":
+      return "Admin@Arjuna2026";
+    case "citizen":
+      return "Citizen@Arjuna2026";
+    default:
+      return "Arjuna@2026";
+  }
+}
+
+/**
  * Predefined account definition for direct credential validation and role-district resolution
  */
 export interface PredefinedAccountInfo {
@@ -563,7 +586,7 @@ export interface PredefinedAccountInfo {
   phone?: string;
   designation?: string;
   facilityName?: string;
-  status: "APPROVED" | "PENDING";
+  status: "APPROVED" | "PENDING" | "REJECTED" | "SUSPENDED";
   isSystemAdmin?: boolean;
 }
 
@@ -571,6 +594,113 @@ export interface PredefinedAccountInfo {
  * Predefined staff and citizen accounts
  */
 export const PREDEFINED_STAFF_ACCOUNTS: PredefinedAccountInfo[] = [
+  // Pune District Staff
+  {
+    id: "doctor-pune",
+    name: "Dr. Rajesh Kulkarni",
+    email: "doctor.pune@arjuna.gov.in",
+    password: "Doctor@Arjuna2026",
+    role: "doctor",
+    district: "Pune",
+    village: "Pune City",
+    phone: "+91 98220 11001",
+    designation: "Chief Medical Officer (MBBS, MD)",
+    facilityName: "Aundh District Hospital Pune",
+    status: "APPROVED",
+  },
+  {
+    id: "asha-pune",
+    name: "Pooja Jadhav",
+    email: "asha.pune@arjuna.gov.in",
+    password: "Asha@Arjuna2026",
+    role: "asha",
+    district: "Pune",
+    village: "Haveli",
+    phone: "+91 98220 11002",
+    designation: "Senior ASHA Health Facilitator",
+    facilityName: "Haveli Primary Health Centre",
+    status: "APPROVED",
+  },
+  {
+    id: "cho-pune",
+    name: "Sanjay Shinde",
+    email: "cho.pune@arjuna.gov.in",
+    password: "Cho@Arjuna2026",
+    role: "cho",
+    district: "Pune",
+    village: "Baramati",
+    phone: "+91 98220 11003",
+    designation: "Community Health Officer (CHO)",
+    facilityName: "Baramati Health and Wellness Centre",
+    status: "APPROVED",
+  },
+  {
+    id: "staff-pune",
+    name: "Anil Deshmukh",
+    email: "staff.pune@arjuna.gov.in",
+    password: "Staff@Arjuna2026",
+    role: "facility_staff",
+    district: "Pune",
+    village: "Pune City",
+    phone: "+91 98220 11004",
+    designation: "Chief Pharmacist & Inventory Lead",
+    facilityName: "Pune District Health Office",
+    status: "APPROVED",
+  },
+  {
+    id: "doctor-sneha-pune",
+    name: "Dr. Sneha Patil",
+    email: "dr.sneha.patil@arjuna.gov.in",
+    password: "Doctor@Arjuna2026",
+    role: "doctor",
+    district: "Pune",
+    village: "Shirur",
+    phone: "+91 98220 11005",
+    designation: "Medical Officer (MBBS)",
+    facilityName: "Shirur Rural Hospital",
+    status: "PENDING",
+  },
+  {
+    id: "asha-meena-pune",
+    name: "Meena Thorat",
+    email: "asha.meena.pune@arjuna.gov.in",
+    password: "Asha@Arjuna2026",
+    role: "asha",
+    district: "Pune",
+    village: "Khed",
+    phone: "+91 98220 11006",
+    designation: "ASHA Community Worker",
+    facilityName: "Khed Subcentre",
+    status: "PENDING",
+  },
+  {
+    id: "cho-vikas-pune",
+    name: "Vikas Gaikwad",
+    email: "cho.vikas.pune@arjuna.gov.in",
+    password: "Cho@Arjuna2026",
+    role: "cho",
+    district: "Pune",
+    village: "Daund",
+    phone: "+91 98220 11007",
+    designation: "Community Health Officer (CHO)",
+    facilityName: "Daund Health & Wellness Centre",
+    status: "SUSPENDED",
+  },
+  {
+    id: "doctor-rohit-pune",
+    name: "Dr. Rohit Pawar",
+    email: "dr.rohit.pawar@arjuna.gov.in",
+    password: "Doctor@Arjuna2026",
+    role: "doctor",
+    district: "Pune",
+    village: "Purandar",
+    phone: "+91 98220 11008",
+    designation: "Medical Officer",
+    facilityName: "Purandar Primary Health Centre",
+    status: "REJECTED",
+  },
+
+  // Nandurbar District Staff (Demo)
   {
     id: "doctor-deshmukh",
     name: "Dr. Amit Deshmukh",
@@ -686,6 +816,172 @@ export const PREDEFINED_STAFF_ACCOUNTS: PredefinedAccountInfo[] = [
     phone: "+91 98221 14400",
     designation: "Citizen / NCD Patient (Hero Profile)",
     facilityName: "Karanji Budruk Health and Wellness Centre",
+    status: "APPROVED",
+  },
+
+  // Nashik District Staff
+  {
+    id: "doctor-nashik",
+    name: "Dr. Ananya Joshi",
+    email: "doctor.nashik@arjuna.gov.in",
+    password: "Doctor@Arjuna2026",
+    role: "doctor",
+    district: "Nashik",
+    village: "Dindori",
+    phone: "+91 98220 22001",
+    designation: "Medical Officer (MBBS)",
+    facilityName: "Dindori Primary Health Centre",
+    status: "APPROVED",
+  },
+  {
+    id: "asha-nashik",
+    name: "Sarita Gaikwad",
+    email: "asha.nashik@arjuna.gov.in",
+    password: "Asha@Arjuna2026",
+    role: "asha",
+    district: "Nashik",
+    village: "Niphad",
+    phone: "+91 98220 22002",
+    designation: "ASHA Facilitator",
+    facilityName: "Niphad Subcentre",
+    status: "APPROVED",
+  },
+  {
+    id: "cho-nashik",
+    name: "Rahul Bagul",
+    email: "cho.nashik@arjuna.gov.in",
+    password: "Cho@Arjuna2026",
+    role: "cho",
+    district: "Nashik",
+    village: "Yeola",
+    phone: "+91 98220 22003",
+    designation: "Community Health Officer (CHO)",
+    facilityName: "Yeola Health & Wellness Centre",
+    status: "PENDING",
+  },
+
+  // Nagpur District Staff
+  {
+    id: "doctor-nagpur",
+    name: "Dr. Pradip Meshram",
+    email: "doctor.nagpur@arjuna.gov.in",
+    password: "Doctor@Arjuna2026",
+    role: "doctor",
+    district: "Nagpur",
+    village: "Kamthi",
+    phone: "+91 98220 33001",
+    designation: "Medical Officer (MBBS, MS)",
+    facilityName: "Kamthi Sub-District Hospital",
+    status: "APPROVED",
+  },
+  {
+    id: "asha-nagpur",
+    name: "Rekha Wankhede",
+    email: "asha.nagpur@arjuna.gov.in",
+    password: "Asha@Arjuna2026",
+    role: "asha",
+    district: "Nagpur",
+    village: "Umred",
+    phone: "+91 98220 33002",
+    designation: "ASHA Worker",
+    facilityName: "Umred Primary Health Centre",
+    status: "APPROVED",
+  },
+  {
+    id: "cho-nagpur",
+    name: "Pravin Raut",
+    email: "cho.nagpur@arjuna.gov.in",
+    password: "Cho@Arjuna2026",
+    role: "cho",
+    district: "Nagpur",
+    village: "Katol",
+    phone: "+91 98220 33003",
+    designation: "Community Health Officer (CHO)",
+    facilityName: "Katol Health & Wellness Centre",
+    status: "PENDING",
+  },
+
+  // Mumbai City Staff
+  {
+    id: "doctor-mumbai",
+    name: "Dr. Farhan Merchant",
+    email: "doctor.mumbai@arjuna.gov.in",
+    password: "Doctor@Arjuna2026",
+    role: "doctor",
+    district: "Mumbai City",
+    village: "Mumbai City",
+    phone: "+91 98220 44001",
+    designation: "Senior Medical Consultant",
+    facilityName: "Mumbai Urban Health Centre",
+    status: "APPROVED",
+  },
+  {
+    id: "staff-mumbai",
+    name: "Deepak Sawant",
+    email: "staff.mumbai@arjuna.gov.in",
+    password: "Staff@Arjuna2026",
+    role: "facility_staff",
+    district: "Mumbai City",
+    village: "Mumbai City",
+    phone: "+91 98220 44002",
+    designation: "Urban Health Program Coordinator",
+    facilityName: "District Health Directorate",
+    status: "APPROVED",
+  },
+
+  // Chhatrapati Sambhajinagar Staff
+  {
+    id: "doctor-csambhajinagar",
+    name: "Dr. Harish Salve",
+    email: "doctor.csambhajinagar@arjuna.gov.in",
+    password: "Doctor@Arjuna2026",
+    role: "doctor",
+    district: "Chhatrapati Sambhajinagar (Aurangabad)",
+    village: "Paithan",
+    phone: "+91 98220 55001",
+    designation: "Medical Officer",
+    facilityName: "Paithan Rural Hospital",
+    status: "APPROVED",
+  },
+  {
+    id: "asha-csambhajinagar",
+    name: "Savita Chavan",
+    email: "asha.csambhajinagar@arjuna.gov.in",
+    password: "Asha@Arjuna2026",
+    role: "asha",
+    district: "Chhatrapati Sambhajinagar (Aurangabad)",
+    village: "Vaijapur",
+    phone: "+91 98220 55002",
+    designation: "ASHA Worker",
+    facilityName: "Vaijapur Health Centre",
+    status: "PENDING",
+  },
+
+  // Thane District Staff
+  {
+    id: "doctor-thane",
+    name: "Dr. Shraddha Naik",
+    email: "doctor.thane@arjuna.gov.in",
+    password: "Doctor@Arjuna2026",
+    role: "doctor",
+    district: "Thane",
+    village: "Kalyan",
+    phone: "+91 98220 66001",
+    designation: "Medical Officer (MBBS)",
+    facilityName: "Kalyan Sub-District Hospital",
+    status: "APPROVED",
+  },
+  {
+    id: "cho-thane",
+    name: "Nilesh Mhatre",
+    email: "cho.thane@arjuna.gov.in",
+    password: "Cho@Arjuna2026",
+    role: "cho",
+    district: "Thane",
+    village: "Bhiwandi",
+    phone: "+91 98220 66002",
+    designation: "Community Health Officer (CHO)",
+    facilityName: "Bhiwandi Health & Wellness Centre",
     status: "APPROVED",
   },
 ];

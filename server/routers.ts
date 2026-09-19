@@ -6,6 +6,7 @@ import { adminProcedure, approvedProcedure, careTeamProcedure, doctorProcedure, 
 import { sdk } from "./_core/sdk";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { randomUUID } from "crypto";
 import {
   createAlert,
   createAppointment,
@@ -82,6 +83,7 @@ import {
   resetDemoEnvironment,
   authenticateUser,
   getUserByEmail,
+  upsertUser,
 } from "./db";
 import { SYNTHETIC_DEMO_ACCOUNTS } from "./syntheticMaharashtraData";
 import {
@@ -380,6 +382,118 @@ export const appRouter = router({
           sessionToken,
         };
       }),
+    register: publicProcedure
+      .input(
+        z.object({
+          name: z.string().min(1, "Full name is required"),
+          email: z.string().email("Valid email is required"),
+          password: z.string().min(8, "Password must be at least 8 characters"),
+          role: z.enum(["citizen", "asha", "cho", "asha_cho", "doctor", "facility_staff", "administrator", "admin"]).default("citizen"),
+          phone: z.string().optional().nullable(),
+          district: z.string().min(1, "District is required"),
+          village: z.string().optional().nullable(),
+          assignedVillage: z.string().optional().nullable(),
+          facilityName: z.string().optional().nullable(),
+          designation: z.string().optional().nullable(),
+          employeeId: z.string().optional().nullable(),
+          registrationNumber: z.string().optional().nullable(),
+          dateOfBirth: z.string().optional().nullable(),
+          age: z.number().optional().nullable(),
+          gender: z.string().optional().nullable(),
+          emergencyContactName: z.string().optional().nullable(),
+          emergencyContactPhone: z.string().optional().nullable(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const email = input.email.toLowerCase().trim();
+        const existing = await getUserByEmail(email);
+        if (existing) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: `An account with email ${email} already exists. Please log in instead.`,
+          });
+        }
+
+        const isStaff = ["doctor", "asha", "cho", "asha_cho", "facility_staff"].includes(input.role);
+        const status = isStaff ? "PENDING" : "APPROVED";
+        const openId = randomUUID();
+
+        const newUser = await upsertUser({
+          openId,
+          authId: openId,
+          name: input.name.trim(),
+          email,
+          password: input.password,
+          loginMethod: "supabase",
+          role: input.role,
+          status,
+          phone: input.phone || null,
+          district: input.district,
+          village: input.village || input.assignedVillage || null,
+          assignedVillage: input.assignedVillage || input.village || null,
+          facilityName: input.facilityName || null,
+          designation: input.designation || null,
+          employeeId: input.employeeId || `EMP-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+          registrationNumber: input.registrationNumber || null,
+          dateOfBirth: input.dateOfBirth || null,
+          age: input.age || null,
+          gender: input.gender || null,
+          emergencyContactName: input.emergencyContactName || null,
+          emergencyContactPhone: input.emergencyContactPhone || null,
+          approvalRequestedAt: isStaff ? new Date() : null,
+          approvedAt: isStaff ? null : new Date(),
+          approvedBy: isStaff ? null : "system",
+        });
+
+        if (isStaff) {
+          await createAlert({
+            userId: (newUser as any)?.id || 1,
+            kind: "system",
+            title: `New Staff Registration: ${input.name}`,
+            message: `${input.name} has registered as ${input.role.toUpperCase()} in ${input.district} District (${input.facilityName || input.assignedVillage || "General"}). Awaiting credential verification.`,
+          });
+        }
+
+        await createAuditEvent({
+          actorId: (newUser as any)?.id || 1,
+          action: isStaff ? "staff.registered" : "citizen.registered",
+          entityType: "user",
+          entityId: (newUser as any)?.id || 1,
+          detail: `User ${email} (${input.role.toUpperCase()}) registered for District ${input.district}. Status: ${status}`,
+        });
+
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        let sessionToken = `session-${openId}-${Date.now()}`;
+        try {
+          sessionToken = await sdk.createSessionToken(openId, { name: input.name });
+        } catch {
+          // fallback string
+        }
+        if (ctx.res && typeof ctx.res.cookie === "function") {
+          ctx.res.cookie(COOKIE_NAME, sessionToken, cookieOptions);
+        }
+
+        return {
+          success: true,
+          status,
+          user: {
+            id: (newUser as any)?.id || 1,
+            openId,
+            name: input.name,
+            email,
+            role: input.role,
+            status,
+            district: input.district,
+            facilityName: input.facilityName || null,
+            assignedVillage: input.assignedVillage || null,
+            phone: input.phone || null,
+          },
+          sessionToken,
+          message: isStaff
+            ? `Staff registration submitted successfully! Your application has been sent to the ${input.district} District Administrator for verification.`
+            : "Citizen account created successfully.",
+        };
+      }),
     demoLogin: publicProcedure
       .input(
         z.object({
@@ -416,9 +530,56 @@ export const appRouter = router({
           token: `demo-token-${account.role}`,
         };
       }),
+    sessionStatus: publicProcedure.query(async ({ ctx }) => {
+      if (!ctx.user) {
+        return {
+          authenticated: false,
+          user: null,
+          status: "UNAUTHENTICATED",
+        };
+      }
+      return {
+        authenticated: true,
+        user: {
+          id: ctx.user.id,
+          openId: ctx.user.openId,
+          name: ctx.user.name,
+          email: ctx.user.email,
+          role: ctx.user.role,
+          status: (ctx.user as any).status || "APPROVED",
+          district: ctx.user.district,
+          facilityName: (ctx.user as any).facilityName || null,
+        },
+        status: ((ctx.user as any).status || "APPROVED").toUpperCase(),
+      };
+    }),
+    refreshSession: publicProcedure.mutation(async ({ ctx }) => {
+      if (!ctx.user) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "No active session to refresh",
+        });
+      }
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      let sessionToken = `session-${ctx.user.openId}-${Date.now()}`;
+      try {
+        sessionToken = await sdk.createSessionToken(ctx.user.openId, { name: ctx.user.name || "" });
+      } catch {
+        // fallback
+      }
+      if (ctx.res && typeof ctx.res.cookie === "function") {
+        ctx.res.cookie(COOKIE_NAME, sessionToken, cookieOptions);
+      }
+      return {
+        success: true,
+        sessionToken,
+        user: ctx.user,
+      };
+    }),
     logout: publicProcedure.mutation(async ({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      const { maxAge: _unusedMaxAge, ...clearOptions } = cookieOptions as any;
+      ctx.res.clearCookie(COOKIE_NAME, clearOptions);
       if (ctx.user) {
         await createAuditEvent({
           actorId: ctx.user.id,
@@ -565,9 +726,10 @@ export const appRouter = router({
         return getHouseholds(districtFilter);
       }),
     get: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(({ input, ctx }) => hasRole(ctx.user.role, "asha_cho", "facility_staff", "administrator", "admin") ? getHouseholdById(input.id) : undefined),
-    create: protectedProcedure.input(z.object({ headName: z.string().min(2), village: z.string().min(2), district: z.string().default("Ahmedabad Rural"), contact: z.string().optional() })).mutation(async ({ input, ctx }) => {
+    create: protectedProcedure.input(z.object({ headName: z.string().min(2), village: z.string().min(2), district: z.string().optional(), contact: z.string().optional() })).mutation(async ({ input, ctx }) => {
       if (!canCoordinate(ctx.user.role)) throw new Error("Only ASHA/CHO workers and care-team roles can create households");
-      const id = await createHousehold({ ...input, assignedWorkerId: ctx.user.id });
+      const effectiveDistrict = input.district || ctx.user.district || "Pune";
+      const id = await createHousehold({ ...input, district: effectiveDistrict, assignedWorkerId: ctx.user.id });
       await createAuditEvent({ actorId: ctx.user.id, action: "household.created", entityType: "household", entityId: id, detail: input.headName });
       return { id };
     }),
@@ -3649,7 +3811,7 @@ export const appRouter = router({
         return {
           success: true,
           user: newUser,
-          message: `Staff member "${input.name}" created and approved successfully.`,
+          message: `Staff member "${input.name}" (${input.role.toUpperCase()}) created & approved with login password: ${newUser.password}`,
         };
       }),
 

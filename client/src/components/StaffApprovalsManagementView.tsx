@@ -46,7 +46,12 @@ import {
   Shield,
 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { MAHARASHTRA_DISTRICTS, getCitiesForDistrict, isSystemAdmin } from "@shared/maharashtraLocations";
+import {
+  MAHARASHTRA_DISTRICTS,
+  getCitiesForDistrict,
+  isSystemAdmin,
+  getDefaultRolePassword,
+} from "@shared/maharashtraLocations";
 
 export interface StaffApprovalsManagementViewProps {
   selectedDistrict?: string;
@@ -72,6 +77,7 @@ export function StaffApprovalsManagementView({
     name: "",
     email: "",
     role: "doctor" as "doctor" | "asha" | "cho" | "facility_staff" | "administrator",
+    password: getDefaultRolePassword("doctor"),
     phone: "",
     district: defaultDistrict,
     assignedVillage: "",
@@ -97,12 +103,17 @@ export function StaffApprovalsManagementView({
 
   const createStaffMutation = trpc.admin.createStaffUser.useMutation({
     onSuccess: (data) => {
-      toast.success(data.message || "Staff member created and approved successfully.");
+      const pwd = newStaffForm.password.trim() || getDefaultRolePassword(newStaffForm.role);
+      toast.success(
+        data.message || `Staff member created & approved! Email: ${newStaffForm.email} | Default Password: ${pwd}`,
+        { duration: 6000 }
+      );
       setAddStaffDialogOpen(false);
       setNewStaffForm({
         name: "",
         email: "",
         role: "doctor",
+        password: getDefaultRolePassword("doctor"),
         phone: "",
         district: defaultDistrict,
         assignedVillage: "",
@@ -550,6 +561,15 @@ export function StaffApprovalsManagementView({
                           </h4>
                           {getRoleBadge(user.role)}
                           {getStatusBadge(user.status)}
+                          {user.loginMethod === "manual_admin" ? (
+                            <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px] font-semibold">
+                              👤 Manually Added
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-slate-100 text-slate-700 border-slate-200 text-[10px] font-medium">
+                              📝 Registered Account
+                            </Badge>
+                          )}
                           {isProtectedAdmin && (
                             <Badge className="bg-purple-900 text-purple-100 font-mono text-[10px] flex items-center gap-1">
                               <Lock className="w-3 h-3" /> Single System Admin
@@ -603,6 +623,10 @@ export function StaffApprovalsManagementView({
                               Reg No: {user.registrationNumber}
                             </span>
                           )}
+                          <span className="flex items-center gap-1 font-mono text-[11px] bg-amber-50 text-amber-900 px-2 py-0.5 rounded-lg border border-amber-200">
+                            <Lock className="w-3 h-3 text-amber-700" />
+                            Default Password: {user.password || getDefaultRolePassword(user.role)}
+                          </span>
                         </div>
 
                         {/* Status detail / reason banner if rejected or requested */}
@@ -871,6 +895,7 @@ export function StaffApprovalsManagementView({
               createStaffMutation.mutate({
                 name: newStaffForm.name.trim(),
                 email: newStaffForm.email.trim(),
+                password: newStaffForm.password.trim() || getDefaultRolePassword(newStaffForm.role),
                 role: newStaffForm.role,
                 phone: newStaffForm.phone.trim() || "+91 94221 00000",
                 district: newStaffForm.district,
@@ -889,7 +914,14 @@ export function StaffApprovalsManagementView({
                 <label className="text-xs font-bold text-slate-700">Healthcare Role *</label>
                 <select
                   value={newStaffForm.role}
-                  onChange={(e) => setNewStaffForm({ ...newStaffForm, role: e.target.value as any })}
+                  onChange={(e) => {
+                    const selectedRole = e.target.value as any;
+                    setNewStaffForm({
+                      ...newStaffForm,
+                      role: selectedRole,
+                      password: getDefaultRolePassword(selectedRole),
+                    });
+                  }}
                   className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold"
                 >
                   <option value="doctor">Doctor / Medical Officer (MO)</option>
@@ -910,6 +942,29 @@ export function StaffApprovalsManagementView({
                   className="rounded-2xl bg-slate-50 border-slate-200 h-10 text-xs"
                 />
               </div>
+            </div>
+
+            {/* PREDEFINED PASSWORD SECTION */}
+            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-amber-700" />
+                  Predefined Login Password *
+                </label>
+                <Badge className="bg-amber-100 text-amber-800 text-[10px] font-semibold border-amber-300">
+                  Role-Based Default
+                </Badge>
+              </div>
+              <Input
+                required
+                value={newStaffForm.password}
+                onChange={(e) => setNewStaffForm({ ...newStaffForm, password: e.target.value })}
+                className="rounded-xl bg-white border-amber-300 h-9 text-xs font-mono font-bold text-slate-800"
+                placeholder="e.g. Asha@Arjuna2026"
+              />
+              <p className="text-[11px] text-amber-800/90 font-medium">
+                The staff member can immediately use their email and this password (<strong>{newStaffForm.password || getDefaultRolePassword(newStaffForm.role)}</strong>) to sign in.
+              </p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
