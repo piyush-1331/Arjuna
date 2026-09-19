@@ -20,6 +20,7 @@ import {
   User,
 } from "lucide-react";
 import { useLocation } from "wouter";
+import { getDistrictForCityOrVillage } from "@shared/maharashtraLocations";
 
 const roleDisplayNames: Record<string, string> = {
   citizen: "Citizen",
@@ -147,7 +148,7 @@ export default function PendingApprovalPage() {
 
                 <div>
                   <span className="text-slate-500">District:</span>
-                  <p className="font-bold text-slate-800">{user.district || "Ahmedabad Rural"}</p>
+                  <p className="font-bold text-slate-800">{user.district || (user.village ? getDistrictForCityOrVillage(user.village) : null) || (user.assignedVillage ? getDistrictForCityOrVillage(user.assignedVillage) : null) || "Pune"}</p>
                 </div>
 
                 {user.facilityName && (

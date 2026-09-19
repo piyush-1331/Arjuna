@@ -1,6 +1,7 @@
 import { trpc } from "@/lib/trpc";
 import { supabase } from "@/lib/supabase";
 import { useCallback, useEffect, useState, useMemo } from "react";
+import { getDistrictForCityOrVillage } from "@shared/maharashtraLocations";
 
 function deriveUserFromSession(session: any) {
   if (!session?.user) return null;
@@ -39,6 +40,12 @@ function deriveUserFromSession(session: any) {
       ? u.email.split("@")[0]
       : "Care Workspace User";
 
+  const resolvedDistrict =
+    meta.district ||
+    (meta.village ? getDistrictForCityOrVillage(meta.village) : null) ||
+    (meta.assigned_village ? getDistrictForCityOrVillage(meta.assigned_village) : null) ||
+    "Pune";
+
   return {
     id: 1,
     openId: u.id,
@@ -53,7 +60,7 @@ function deriveUserFromSession(session: any) {
     age: meta.age != null && !isNaN(Number(meta.age)) ? Number(meta.age) : null,
     gender: meta.gender ?? null,
     village: meta.village ?? null,
-    district: meta.district ?? "Ahmedabad Rural",
+    district: resolvedDistrict,
     facilityId: meta.facility_id != null ? Number(meta.facility_id) : null,
     facilityName: meta.facility_name ?? null,
     designation: meta.designation ?? null,

@@ -38,7 +38,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
-import { MAHARASHTRA_DISTRICTS, getCitiesForDistrict } from "@shared/maharashtraLocations";
+import { MAHARASHTRA_DISTRICTS, getCitiesForDistrict, getDistrictForCityOrVillage } from "@shared/maharashtraLocations";
 import { useLocation } from "wouter";
 
 const roleDisplayNames: Record<string, string> = {
@@ -205,7 +205,7 @@ export default function ProfilePage() {
         setAge(res.user.age ?? "");
         setGender(res.user.gender || "female");
         setVillage(res.user.village || "");
-        setDistrict(res.user.district || "Ahmedabad Rural");
+        setDistrict(res.user.district || (res.user.village ? getDistrictForCityOrVillage(res.user.village) : null) || "Pune");
         setAddress(res.user.address || "");
         setPincode(res.user.pincode || "");
         setEmergencyContactName(res.user.emergencyContactName || "");
@@ -340,7 +340,7 @@ export default function ProfilePage() {
                     setAge(currentUser.age ?? "");
                     setGender(currentUser.gender || "female");
                     setVillage(currentUser.village || "");
-                    setDistrict(currentUser.district || "Ahmedabad Rural");
+                    setDistrict(currentUser.district || (currentUser.village ? getDistrictForCityOrVillage(currentUser.village) : null) || "Pune");
                     setAddress(currentUser.address || "");
                     setPincode(currentUser.pincode || "");
                     setEmergencyContactName(currentUser.emergencyContactName || "");
@@ -728,7 +728,7 @@ export default function ProfilePage() {
                         <MapPin className="h-3.5 w-3.5 text-slate-400" />
                         <span>District</span>
                       </span>
-                      <p className="text-xs font-bold text-slate-900 mt-1">{currentUser.district || "Ahmedabad Rural"}</p>
+                      <p className="text-xs font-bold text-slate-900 mt-1">{currentUser.district || (currentUser.village ? getDistrictForCityOrVillage(currentUser.village) : null) || "Pune"}</p>
                     </div>
 
                     <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5">

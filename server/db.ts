@@ -32,6 +32,7 @@ import {
   DEMO_DATA_LABEL,
   DEMO_DATA_DISCLAIMER,
 } from "./syntheticMaharashtraData";
+import { getDistrictForCityOrVillage } from "../shared/maharashtraLocations";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -838,8 +839,8 @@ export async function upsertUser(user: Record<string, any>): Promise<any> {
         age: Number(cleanUserRecord.age) || 38,
         gender: (cleanUserRecord.gender as any) || "female",
         contact: cleanUserRecord.phone || "+91 98221 44011",
-        village: cleanUserRecord.village || "Sundarpur",
-        district: cleanUserRecord.district || "Ahmedabad Rural",
+        village: cleanUserRecord.village || "Pune City",
+        district: cleanUserRecord.district || (cleanUserRecord.village ? getDistrictForCityOrVillage(cleanUserRecord.village) : null) || "Pune",
         emergencyContact: cleanUserRecord.emergencyContactPhone || cleanUserRecord.emergencyContactName || cleanUserRecord.phone || "+91 98221 00000",
         bloodGroup: cleanUserRecord.bloodGroup || "B+",
         allergies: cleanUserRecord.allergies || "None known",
@@ -1214,8 +1215,8 @@ export async function updateUserProfile(userId: number, editableFields: Record<s
       age: Number(user.age) || 30,
       gender: user.gender || "female",
       contact: user.phone || "+91 98221 00000",
-      village: user.village || "Sundarpur",
-      district: user.district || "Ahmedabad Rural",
+      village: user.village || "Pune City",
+      district: user.district || (user.village ? getDistrictForCityOrVillage(user.village) : null) || "Pune",
       emergencyContact: user.emergencyContactPhone || user.emergencyContactName || user.phone || "+91 98221 00000",
       bloodGroup: user.bloodGroup || "B+",
       allergies: user.allergies || "None",

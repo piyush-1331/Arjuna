@@ -358,3 +358,112 @@ export function normalizeMaharashtraDistrict(input: string): string {
   return partial || trimmed;
 }
 
+/**
+ * Resolves a city/village/town name or input district string to its official Maharashtra district.
+ * e.g., "Pune City" -> "Pune", "Shahada" -> "Nandurbar", "Colaba" -> "Mumbai City", "Aundh" -> "Pune"
+ */
+export function getDistrictForCityOrVillage(locationName?: string | null): string | null {
+  if (!locationName) return null;
+  const normalized = locationName.trim().toLowerCase();
+
+  // 1. Direct district exact / substring match
+  for (const d of MAHARASHTRA_DISTRICTS_REGISTRY) {
+    const distLower = d.name.toLowerCase();
+    const primaryName = d.name.split(" ")[0].toLowerCase();
+    if (
+      distLower === normalized ||
+      distLower.startsWith(normalized) ||
+      normalized.startsWith(distLower) ||
+      primaryName === normalized ||
+      normalized.includes(primaryName)
+    ) {
+      return d.name;
+    }
+  }
+
+  // 2. City / Taluka match
+  for (const d of MAHARASHTRA_DISTRICTS_REGISTRY) {
+    const match = d.majorCities.find((c) => {
+      const cLower = c.toLowerCase();
+      const cPrimary = c.split(" ")[0].toLowerCase();
+      return (
+        cLower === normalized ||
+        cLower.includes(normalized) ||
+        normalized.includes(cLower) ||
+        (cPrimary.length > 3 && normalized.includes(cPrimary))
+      );
+    });
+    if (match) {
+      return d.name;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Returns state name for a given district or village (Maharashtra by default for Arjuna Universal Health Stack)
+ */
+export function getStateForDistrict(districtName?: string | null, villageName?: string | null): string {
+  const combined = `${districtName || ""} ${villageName || ""}`.toLowerCase();
+  if (combined.includes("gujarat") || combined.includes("ahmedabad") || combined.includes("sanand")) {
+    return "Gujarat";
+  }
+  return "Maharashtra";
+}
+
+/**
+ * Returns the primary health centre (PHC) / healthcare facility name for a given district and village.
+ */
+export function getDefaultCentreForLocation(districtName?: string | null, villageName?: string | null): string {
+  const resolvedDist = districtName || getDistrictForCityOrVillage(villageName);
+  const normalized = (resolvedDist || "").toLowerCase();
+  const vNorm = (villageName || "").toLowerCase();
+
+  if (normalized.includes("pune") || vNorm.includes("pune") || vNorm.includes("aundh")) {
+    return "Pune District Hospital & Aundh PHC";
+  }
+  if (normalized.includes("nandurbar") || vNorm.includes("shahada") || vNorm.includes("karanji") || vNorm.includes("sonwadi")) {
+    return "Nandurbar Civil Hospital & Shahada PHC";
+  }
+  if (normalized.includes("nashik") || vNorm.includes("sinnar") || vNorm.includes("malegaon")) {
+    return "Nashik District Hospital & Sinnar PHC";
+  }
+  if (normalized.includes("mumbai") || vNorm.includes("bandra") || vNorm.includes("andheri") || vNorm.includes("colaba")) {
+    return "KEM Hospital & Urban Health Centre";
+  }
+  if (normalized.includes("ahilyanagar") || normalized.includes("ahmednagar") || vNorm.includes("shirdi")) {
+    return "Ahilyanagar District Hospital & Shirdi PHC";
+  }
+  if (normalized.includes("chhatrapati sambhajinagar") || normalized.includes("aurangabad") || vNorm.includes("paithan")) {
+    return "Chhatrapati Sambhajinagar Civil Hospital & Paithan PHC";
+  }
+  if (normalized.includes("nagpur")) {
+    return "Nagpur Government Medical College & PHC";
+  }
+  if (normalized.includes("thane") || vNorm.includes("kalyan")) {
+    return "Thane Civil Hospital & Kalyan PHC";
+  }
+  if (normalized.includes("kolhapur")) {
+    return "Kolhapur CPR General Hospital & PHC";
+  }
+  if (normalized.includes("satara")) {
+    return "Satara District Hospital & Karad PHC";
+  }
+  if (normalized.includes("solapur")) {
+    return "Solapur Civil Hospital & Pandharpur PHC";
+  }
+  if (normalized.includes("amravati")) {
+    return "Amravati District Hospital & Achalpur PHC";
+  }
+  if (normalized.includes("ahmedabad") || vNorm.includes("sundarpur") || vNorm.includes("sanand")) {
+    return "Sanand Community Health Centre & PHC";
+  }
+
+  if (resolvedDist) {
+    const cleanName = resolvedDist.includes("(") ? resolvedDist.split(" ")[0] : resolvedDist;
+    return `${cleanName} Primary Health Centre (PHC)`;
+  }
+
+  return "Pune District Hospital & Aundh PHC";
+}

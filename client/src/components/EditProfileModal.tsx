@@ -35,7 +35,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { MAHARASHTRA_DISTRICTS, getCitiesForDistrict } from "@shared/maharashtraLocations";
+import { MAHARASHTRA_DISTRICTS, getCitiesForDistrict, getDistrictForCityOrVillage } from "@shared/maharashtraLocations";
 
 interface EditProfileModalProps {
   open: boolean;
@@ -185,7 +185,7 @@ export function EditProfileModal({
                 age: payload.age,
                 gender: payload.gender,
                 village: payload.village,
-                district: payload.district || "Ahmedabad Rural",
+                district: payload.district || (payload.village ? getDistrictForCityOrVillage(payload.village) : null) || "Pune",
                 address: payload.address,
                 pincode: payload.pincode,
                 emergency_contact_name: payload.emergencyContactName,

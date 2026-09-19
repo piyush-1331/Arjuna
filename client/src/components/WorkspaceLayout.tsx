@@ -30,6 +30,7 @@ import {
   X,
 } from "lucide-react";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
+import { getDistrictForCityOrVillage, getStateForDistrict } from "@shared/maharashtraLocations";
 
 export interface NavItem {
   id: string;
@@ -47,6 +48,9 @@ interface WorkspaceLayoutProps {
   subtitle?: string;
   children: React.ReactNode;
   actions?: React.ReactNode;
+  district?: string;
+  village?: string;
+  state?: string;
 }
 
 const roleDisplayNames: Record<string, string> = {
@@ -78,11 +82,29 @@ export default function WorkspaceLayout({
   subtitle,
   children,
   actions,
+  district,
+  village,
+  state,
 }: WorkspaceLayoutProps) {
   const { user, isAuthenticated, loading, logout } = useAuth();
   const [, setLocation] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+
+  const effectiveDistrict =
+    district ||
+    user?.district ||
+    (user?.village ? getDistrictForCityOrVillage(user.village) : null) ||
+    (user?.assignedVillage ? getDistrictForCityOrVillage(user.assignedVillage) : null) ||
+    "Pune";
+
+  const effectiveState =
+    state ||
+    getStateForDistrict(effectiveDistrict, village || user?.village || user?.assignedVillage);
+
+  const districtLabel = effectiveDistrict.toLowerCase().includes("district")
+    ? effectiveDistrict
+    : `${effectiveDistrict} District`;
 
   const {
     isOnline,
@@ -365,7 +387,7 @@ export default function WorkspaceLayout({
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
               {roleDisplayNames[role]} Workspace
             </p>
-            <p className="mt-0.5 text-xs font-semibold text-slate-700 dark:text-slate-300">Ahmedabad Rural District</p>
+            <p className="mt-0.5 text-xs font-semibold text-slate-700 dark:text-slate-300">{districtLabel}</p>
           </div>
 
           <nav className="mt-4 space-y-1 flex-1">
@@ -423,7 +445,7 @@ export default function WorkspaceLayout({
             <div>
               <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
                 <MapPin className="h-3.5 w-3.5" />
-                <span>Gujarat · Ahmedabad Rural</span>
+                <span>{effectiveState} · {effectiveDistrict}</span>
                 <span>/</span>
                 <span className="text-slate-800 dark:text-slate-200 font-bold">{roleDisplayNames[role]}</span>
               </div>

@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import WorkspaceLayout, { NavItem } from "@/components/WorkspaceLayout";
 import { trpc } from "@/lib/trpc";
+import { getDistrictForCityOrVillage, getStateForDistrict, getDefaultCentreForLocation } from "@shared/maharashtraLocations";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -450,8 +451,8 @@ export default function CitizenWorkspace() {
             age: newFamilyMemberItem.age,
             gender: newFamilyMemberItem.gender,
             contact: newFamilyMemberItem.contact || undefined,
-            village: newFamilyMemberItem.village || "Sundarpur",
-            district: newFamilyMemberItem.district || "Ahmedabad Rural",
+            village: newFamilyMemberItem.village || user?.village || "Pune City",
+            district: newFamilyMemberItem.district || user?.district || (user?.village ? getDistrictForCityOrVillage(user.village) : null) || "Pune",
             conditions: newFamilyMemberItem.conditions || undefined,
             allergies: newFamilyMemberItem.allergies || undefined,
             blood_group: newFamilyMemberItem.bloodGroup || undefined,
@@ -544,8 +545,15 @@ export default function CitizenWorkspace() {
   const displayName = user?.name || currentPatient?.name || "Citizen";
   const displayAge = user?.age || currentPatient?.age;
   const displayGender = user?.gender || currentPatient?.gender || "Not specified";
-  const displayVillage = user?.village || currentPatient?.village || "Not specified";
-  const displayDistrict = user?.district || currentPatient?.district || "Ahmedabad Rural";
+  const displayVillage = user?.village || currentPatient?.village || "Pune City";
+  const displayDistrict =
+    user?.district ||
+    currentPatient?.district ||
+    (user?.village ? getDistrictForCityOrVillage(user.village) : null) ||
+    (currentPatient?.village ? getDistrictForCityOrVillage(currentPatient.village) : null) ||
+    "Pune";
+  const displayState = getStateForDistrict(displayDistrict, displayVillage);
+  const displayFacilityName = user?.facilityName || getDefaultCentreForLocation(displayDistrict, displayVillage);
   const displayAbhaId = user?.abhaId || currentPatient?.abhaId || (user?.id ? `91-8201-${String(user.id).padStart(4, "0")}` : "91-8201-9921");
   const displayEmergencyContact = user?.emergencyContactPhone || user?.phone || currentPatient?.emergencyContact || user?.emergencyContactName || "Not Provided";
   const displayBloodGroup = user?.bloodGroup || currentPatient?.bloodGroup || "Not Provided";
@@ -614,6 +622,9 @@ export default function CitizenWorkspace() {
       activeTab={activeTab}
       onTabChange={setActiveTab}
       navItems={navItems}
+      district={displayDistrict}
+      village={displayVillage}
+      state={displayState}
       title={
         activeTab === "dashboard"
           ? "My Care Plan & Health Portal"
@@ -674,7 +685,7 @@ export default function CitizenWorkspace() {
                       Blood Group: <strong>{displayBloodGroup}</strong>
                     </span>
                     <span className="rounded-xl bg-white px-3 py-1.5 shadow-xs border border-black/5">
-                      Assigned Centre: <strong>{user?.facilityName || "Sundarpur PHC"}</strong>
+                      Assigned Centre: <strong>{displayFacilityName}</strong>
                     </span>
                     <span className="rounded-xl bg-white px-3 py-1.5 shadow-xs border border-black/5">
                       Emergency Contact: <strong>{displayEmergencyContact}</strong>
@@ -2319,9 +2330,9 @@ export default function CitizenWorkspace() {
               {/* Prescription Header */}
               <div className="border-b-2 border-slate-900 dark:border-slate-100 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h3 className="font-black text-lg text-slate-900 dark:text-slate-100 uppercase tracking-tight">Sundarpur Ayushman Arogya Mandir</h3>
-                  <p className="text-slate-600 dark:text-slate-300">Health & Wellness Centre, Ahmedabad Rural District, Gujarat</p>
-                  <p className="text-slate-500 dark:text-slate-400 font-mono text-[10px] mt-0.5">Facility Registry Code: HWC-GJ-AMD-0041</p>
+                  <h3 className="font-black text-lg text-slate-900 dark:text-slate-100 uppercase tracking-tight">{displayFacilityName}</h3>
+                  <p className="text-slate-600 dark:text-slate-300">Health & Wellness Centre, {displayDistrict} District, {displayState}</p>
+                  <p className="text-slate-500 dark:text-slate-400 font-mono text-[10px] mt-0.5">Facility Registry Code: HWC-MH-{displayDistrict.substring(0, 3).toUpperCase()}-0041</p>
                 </div>
                 <div className="sm:text-right text-xs">
                   <Badge variant="outline" className="bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800 font-mono">
@@ -2391,7 +2402,7 @@ export default function CitizenWorkspace() {
                                   : "bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
                               }`}
                             >
-                              {rx.citizenAvailability?.availability || "Available"} @ {rx.facilityName || "Sundarpur PHC"}
+                              {rx.citizenAvailability?.availability || "Available"} @ {rx.facilityName || displayFacilityName}
                             </span>
                           </td>
                           <td className="p-2.5 text-slate-600 dark:text-slate-300">{rx.instructions || "As directed"}</td>
@@ -2458,8 +2469,8 @@ export default function CitizenWorkspace() {
                   <Input
                     value={medicineSearchQuery}
                     onChange={(e) => setMedicineSearchQuery(e.target.value)}
-                    placeholder="Search medicine (e.g. Paracetamol, Amlodipine, Metformin...)"
-                    className="pl-10 pr-4 py-2 text-sm rounded-xl border-slate-200 dark:border-slate-700"
+                    placeholder="Search medicine name (e.g. Paracetamol, Amoxicillin, Metformin)..."
+                    className="pl-10 rounded-2xl border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs h-11 focus:bg-white dark:focus:bg-slate-900"
                   />
                 </div>
 
@@ -2493,7 +2504,7 @@ export default function CitizenWorkspace() {
               {/* Search Results List */}
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-semibold px-1">
-                  <span>Showing Centres near {currentPatient?.village || "Sundarpur"}</span>
+                  <span>Showing Centres near {displayVillage}</span>
                   {citizenFacilitySearch.isFetching ? (
                     <span className="text-purple-600 dark:text-purple-400 animate-pulse">Checking stock levels...</span>
                   ) : (

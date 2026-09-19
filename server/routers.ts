@@ -1,4 +1,5 @@
 import { COOKIE_NAME } from "@shared/const";
+import { getDistrictForCityOrVillage } from "@shared/maharashtraLocations";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, approvedProcedure, careTeamProcedure, doctorProcedure, facilityStaffProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -469,7 +470,7 @@ export const appRouter = router({
               : { title: "Your personal care plan", description: "Review your health vitals, active prescriptions, appointments, family records, and safety-net guidance." };
       return {
         role: ctx.user.role,
-        district: ctx.user.district ?? "Ahmedabad Rural",
+        district: ctx.user.district ?? (ctx.user.village ? getDistrictForCityOrVillage(ctx.user.village) : null) ?? "Pune",
         roleFocus,
         metrics,
         permissions: {
