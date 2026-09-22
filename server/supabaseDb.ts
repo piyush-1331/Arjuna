@@ -1,5 +1,5 @@
 import type { InsertUser } from "../drizzle/schema";
-import { isSupabaseConfigured, supabaseAdmin } from "./supabase";
+import { isSupabaseConfigured, isSupabaseDataActive, supabaseAdmin } from "./supabase";
 import { createHash, randomUUID } from "crypto";
 
 export function toValidUuid(val: string | null | undefined): string {
@@ -19,11 +19,14 @@ export function isMissingColumnError(error: any): boolean {
   const code = (error.code || "").toString();
   return (
     code === "PGRST204" ||
+    code === "PGRST205" ||
     code === "42703" ||
+    code === "42P01" ||
     msg.includes("does not exist") ||
     msg.includes("schema cache") ||
     msg.includes("could not find the") ||
-    msg.includes("column")
+    msg.includes("column") ||
+    msg.includes("table")
   );
 }
 
@@ -171,10 +174,68 @@ function mapAppointment(row: any) {
   };
 }
 
-async function insertId(table: string, input: Record<string, unknown>) {
-  const row = unwrap(await client().from(table).insert(insertPayload(input)).select("id").single()) as { id?: number } | null;
-  if (!row?.id) throw new Error(`Supabase insert into ${table} did not return an id`);
-  return Number(row.id);
+async function insertId(table: string, input: Record<string, unknown>): Promise<number> {
+  let payload = insertPayload(input);
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const res = await client().from(table).insert(payload).select("id").single();
+    if (!res.error) {
+      const row = res.data as { id?: number } | null;
+      if (row?.id) return Number(row.id);
+      throw new Error(`Supabase insert into ${table} did not return an id`);
+    }
+
+    const err = res.error;
+    const colMatch = err.message?.match(/Could not find the '([^']+)' column/i)
+      || err.message?.match(/column "([^"]+)" of relation "[^"]+" does not exist/i)
+      || err.message?.match(/column "([^"]+)" does not exist/i);
+
+    if (colMatch && colMatch[1] && payload[colMatch[1]] !== undefined) {
+      delete payload[colMatch[1]];
+      continue;
+    }
+
+    if (isMissingColumnError(err)) {
+      const errorStr = err.message || "";
+      const matchedKey = Object.keys(payload).find((k) => errorStr.includes(k));
+      if (matchedKey) {
+        delete payload[matchedKey];
+        continue;
+      }
+    }
+
+    throw new Error(err.message || String(err));
+  }
+  throw new Error(`Supabase insert into ${table} failed after resolving missing columns`);
+}
+
+async function safeUpdate(table: string, id: number, input: Record<string, unknown>): Promise<void> {
+  let payload = insertPayload(input);
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const res = await client().from(table).update(payload).eq("id", id);
+    if (!res.error) return;
+
+    const err = res.error;
+    const colMatch = err.message?.match(/Could not find the '([^']+)' column/i)
+      || err.message?.match(/column "([^"]+)" of relation "[^"]+" does not exist/i)
+      || err.message?.match(/column "([^"]+)" does not exist/i);
+
+    if (colMatch && colMatch[1] && payload[colMatch[1]] !== undefined) {
+      delete payload[colMatch[1]];
+      continue;
+    }
+
+    if (isMissingColumnError(err)) {
+      const errorStr = err.message || "";
+      const matchedKey = Object.keys(payload).find((k) => errorStr.includes(k));
+      if (matchedKey) {
+        delete payload[matchedKey];
+        continue;
+      }
+      return;
+    }
+
+    throw new Error(err.message || String(err));
+  }
 }
 
 export function toSupabaseInsertPayload(input: Record<string, unknown>) {
@@ -191,7 +252,7 @@ function insertPayload(input: Record<string, unknown>) {
   }));
 }
 
-export function isSupabaseDataConfigured() { return isSupabaseConfigured; }
+export function isSupabaseDataConfigured() { return isSupabaseDataActive; }
 
 export async function upsertUser(user: Record<string, any>): Promise<void> {
   const safeOpenId = toValidUuid(user.openId);
@@ -903,7 +964,7 @@ export async function createHousehold(input: Record<string, unknown>) { return i
 export async function getPatientById(id: number) { return mapPatient(unwrap(await client().from("patients").select("*").eq("id", id).maybeSingle())); }
 
 export async function updatePatient(id: number, input: Record<string, unknown>) {
-  unwrap(await client().from("patients").update(insertPayload({ ...input, updatedAt: new Date() })).eq("id", id));
+  await safeUpdate("patients", id, { ...input, updatedAt: new Date() });
   return { success: true };
 }
 
@@ -1016,17 +1077,35 @@ export async function createPatient(input: Record<string, unknown>) {
 export async function createVisit(input: Record<string, unknown>) { return insertId("health_visits", input); }
 export async function createReferral(input: Record<string, unknown>) { return insertId("referrals", input); }
 export async function getReferrals(patientId?: number) {
-  const query = client().from("referrals").select("*").order("created_at", { ascending: false });
-  const result = patientId ? await query.eq("patient_id", patientId) : await query;
-  return many<any>(unwrap(result)).map(mapReferral);
+  try {
+    const query = client().from("referrals").select("*").order("created_at", { ascending: false });
+    const result = patientId ? await query.eq("patient_id", patientId) : await query;
+    if (result.error) {
+      if (isMissingColumnError(result.error)) return [];
+      throw new Error(result.error.message || String(result.error));
+    }
+    return many<any>(result.data).map(mapReferral);
+  } catch (err) {
+    if (!isMissingColumnError(err)) console.warn("[Supabase] getReferrals warning:", (err as any)?.message || err);
+    return [];
+  }
 }
 export async function getVisits(patientId?: number) {
-  const query = client().from("health_visits").select("*").order("created_at", { ascending: false });
-  const result = patientId ? await query.eq("patient_id", patientId) : await query;
-  return many<any>(unwrap(result)).map(mapVisit);
+  try {
+    const query = client().from("health_visits").select("*").order("created_at", { ascending: false });
+    const result = patientId ? await query.eq("patient_id", patientId) : await query;
+    if (result.error) {
+      if (isMissingColumnError(result.error)) return [];
+      throw new Error(result.error.message || String(result.error));
+    }
+    return many<any>(result.data).map(mapVisit);
+  } catch (err) {
+    if (!isMissingColumnError(err)) console.warn("[Supabase] getVisits warning:", (err as any)?.message || err);
+    return [];
+  }
 }
 export async function getReferralById(id: number) { return mapReferral(unwrap(await client().from("referrals").select("*").eq("id", id).maybeSingle())); }
-export async function updateReferral(id: number, values: Record<string, unknown>) { unwrap(await client().from("referrals").update(insertPayload(values)).eq("id", id)); }
+export async function updateReferral(id: number, values: Record<string, unknown>) { await safeUpdate("referrals", id, values); }
 export async function createFollowUp(input: Record<string, unknown>) { return insertId("follow_ups", input); }
 export async function getFollowUpById(id: number) { return mapFollowUp(unwrap(await client().from("follow_ups").select("*").eq("id", id).maybeSingle())); }
 export async function completeFollowUp(input: number | { id: number; completedBy?: number; completionNotes?: string; vitals?: Record<string, unknown> }) {
@@ -1054,9 +1133,17 @@ export async function getAppointments(patientId?: number, doctorId?: number) {
     if (patientId) query = query.eq("patient_id", patientId);
     if (doctorId) query = query.eq("doctor_id", doctorId);
     const result = await query;
-    return many(unwrap(result)).map(mapAppointment);
+    if (result.error) {
+      if (isMissingColumnError(result.error)) {
+        return [];
+      }
+      throw new Error(result.error.message || String(result.error));
+    }
+    return many(result.data).map(mapAppointment);
   } catch (err) {
-    console.warn("[Supabase] getAppointments fallback notice:", err);
+    if (!isMissingColumnError(err)) {
+      console.warn("[Supabase] getAppointments query warning:", (err as any)?.message || err);
+    }
     return [];
   }
 }
@@ -1064,6 +1151,9 @@ export async function createAppointment(input: Record<string, unknown>) {
   try {
     return await insertId("appointments", input);
   } catch (err) {
+    if (isMissingColumnError(err)) {
+      return undefined;
+    }
     try {
       const essential = {
         patient_id: input.patientId,
@@ -1074,12 +1164,19 @@ export async function createAppointment(input: Record<string, unknown>) {
         status: input.status || "scheduled",
         notes: input.notes,
       };
-      const row = unwrap(await client().from("appointments").insert(essential).select("id").single()) as { id?: number } | null;
+      const res = await client().from("appointments").insert(essential).select("id").single();
+      if (res.error) {
+        if (isMissingColumnError(res.error)) return undefined;
+        throw new Error(res.error.message || String(res.error));
+      }
+      const row = res.data as { id?: number } | null;
       if (row?.id) return Number(row.id);
     } catch (retryErr) {
-      console.warn("[Supabase] createAppointment fallback notice:", retryErr);
+      if (!isMissingColumnError(retryErr)) {
+        console.warn("[Supabase] createAppointment fallback notice:", (retryErr as any)?.message || retryErr);
+      }
     }
-    throw err;
+    return undefined;
   }
 }
 

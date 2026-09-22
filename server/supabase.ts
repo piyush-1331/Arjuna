@@ -5,6 +5,10 @@ export const isSupabaseConfigured = Boolean(
   ENV.supabaseUrl && ENV.supabasePublishableKey && ENV.supabaseServiceRoleKey,
 );
 
+export const isSupabaseDataActive = Boolean(
+  isSupabaseConfigured && (process.env.NODE_ENV !== "test" || process.env.TEST_SUPABASE === "true"),
+);
+
 export const supabaseAdmin = isSupabaseConfigured
   ? createClient(ENV.supabaseUrl, ENV.supabaseServiceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
