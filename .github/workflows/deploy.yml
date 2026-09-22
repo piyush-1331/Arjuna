@@ -33,10 +33,11 @@ jobs:
 
       - name: Build static site with Vite
         env:
-          VITE_BASE_PATH: "./"
+          NODE_ENV: production
+          VITE_BASE_PATH: /Arjuna/
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-        run: npx vite build
+        run: npx vite build --base=/Arjuna/
 
       - name: Copy index.html to 404.html for SPA routing
         run: cp dist/public/index.html dist/public/404.html
