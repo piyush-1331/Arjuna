@@ -18,12 +18,13 @@ import {
   findPredefinedAccount,
   DISTRICT_ADMIN_ACCOUNTS,
   SYSTEM_ADMIN_ACCOUNT,
+  SUPER_ADMIN_ACCOUNT,
 } from "../shared/maharashtraLocations";
 import * as db from "./db";
 
 // Helper to create mock TrpcContext
 function createMockContext(
-  role: "citizen" | "asha" | "cho" | "asha_cho" | "doctor" | "facility_staff" | "administrator" | "admin",
+  role: "citizen" | "asha" | "cho" | "asha_cho" | "doctor" | "facility_staff" | "administrator" | "admin" | "super_admin",
   status: "PENDING" | "APPROVED" | "REJECTED" | "SUSPENDED" = "APPROVED",
   email: string = "test@example.com",
   id: number = 42,
@@ -236,7 +237,14 @@ describe("Account Status & Post-Login Routing", () => {
   });
 
   it("authenticates and resolves correct district for all 36 Maharashtra district admins", () => {
-    expect(DISTRICT_ADMIN_ACCOUNTS.length).toBe(37); // 36 districts + 1 system admin
+    expect(DISTRICT_ADMIN_ACCOUNTS.length).toBe(38); // 36 districts + 1 system admin + 1 super admin
+
+    // Super Admin
+    const superAdmin = findPredefinedAccount("superadmin@arjuna.gov.in", "SuperAdmin@Arjuna2026");
+    expect(superAdmin).not.toBeNull();
+    expect(superAdmin?.role).toBe("super_admin");
+    expect(superAdmin?.isSystemAdmin).toBe(true);
+    expect(getPostLoginRoute(superAdmin!.role, superAdmin!.status)).toBe("/dashboard/administrator");
 
     // Pune District Admin
     const puneAdmin = findPredefinedAccount("admin.pune@arjuna.gov.in", "Admin@Arjuna2026");
@@ -617,6 +625,79 @@ describe("Administrator RBAC, Invariants & Staff Approval Workflow", () => {
       expect(updatedUser?.status).toBe("APPROVED");
       const postApprovalRoute = getPostLoginRoute(updatedUser!.role, updatedUser!.status);
       expect(postApprovalRoute).toBe("/dashboard/doctor");
+    });
+
+    it("authenticates Apex Super Administrator (superadmin@arjuna.gov.in) with full state-wide privileges", async () => {
+      const predefinedSuper = findPredefinedAccount("superadmin@arjuna.gov.in", "SuperAdmin@Arjuna2026");
+      expect(predefinedSuper).toBeDefined();
+      expect(predefinedSuper?.email).toBe("superadmin@arjuna.gov.in");
+      expect(predefinedSuper?.isSystemAdmin).toBe(true);
+      expect(predefinedSuper?.designation).toContain("Super Administrator");
+
+      const authUser = await db.authenticateUser("superadmin@arjuna.gov.in", "SuperAdmin@Arjuna2026");
+      expect(authUser).toBeDefined();
+      expect(authUser?.email).toBe("superadmin@arjuna.gov.in");
+      expect(authUser?.status).toBe("APPROVED");
+
+      const superAdminCtx = createMockContext("super_admin", "APPROVED", "superadmin@arjuna.gov.in", 999, "All Districts (Maharashtra)");
+      const superCaller = appRouter.createCaller(superAdminCtx);
+
+      // Super Admin lists all 36 Maharashtra district administrators + state admins
+      const districtAdminsRes = await superCaller.admin.listDistrictAdmins();
+      expect(districtAdminsRes.isSystemAdmin).toBe(true);
+      expect(districtAdminsRes.districtAdmins.length).toBeGreaterThanOrEqual(37);
+
+      const puneAdmin = districtAdminsRes.districtAdmins.find((d) => d.district.toLowerCase() === "pune");
+      expect(puneAdmin).toBeDefined();
+      expect(puneAdmin?.email).toBe("admin.pune@arjuna.gov.in");
+
+      const nandurbarAdmin = districtAdminsRes.districtAdmins.find((d) => d.district.toLowerCase() === "nandurbar");
+      expect(nandurbarAdmin).toBeDefined();
+      expect(nandurbarAdmin?.email).toBe("admin.nandurbar@arjuna.gov.in");
+    });
+
+    it("allows Super Administrator to edit user details and change roles across any district", async () => {
+      const targetUserEmail = `target.doctor.${Date.now()}@arjuna.gov.in`;
+      const created = await db.createStaffUser({
+        name: "Dr. Initial Name",
+        email: targetUserEmail,
+        role: "doctor",
+        phone: "+91 94220 11223",
+        district: "Kolhapur",
+        assignedVillage: "Kolhapur City",
+        designation: "General Physician",
+        password: "Doctor@Arjuna2026",
+      });
+
+      expect(created.id).toBeDefined();
+
+      const superAdminCtx = createMockContext("super_admin", "APPROVED", "superadmin@arjuna.gov.in", 999, "All Districts (Maharashtra)");
+      const superCaller = appRouter.createCaller(superAdminCtx);
+
+      // Super admin updates user details, promotes role to CHO, and transfers district to Satara
+      const updateRes = await superCaller.admin.updateUser({
+        userId: created.id,
+        name: "Dr. Promoted Specialist",
+        role: "cho",
+        district: "Satara",
+        assignedVillage: "Karad",
+        designation: "Senior Community Health Officer",
+        phone: "+91 94220 99887",
+        password: "NewChoPassword@2026",
+      });
+
+      expect(updateRes.success).toBe(true);
+      expect(updateRes.user.name).toBe("Dr. Promoted Specialist");
+      expect(updateRes.user.role).toBe("cho");
+      expect(updateRes.user.district).toBe("Satara");
+      expect(updateRes.user.assignedVillage).toBe("Karad");
+      expect(updateRes.user.password).toBe("NewChoPassword@2026");
+
+      // Verify persistence in db
+      const fetched = await db.getUserById(created.id);
+      expect(fetched?.name).toBe("Dr. Promoted Specialist");
+      expect(fetched?.role).toBe("cho");
+      expect(fetched?.district).toBe("Satara");
     });
   });
 });

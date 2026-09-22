@@ -1,6 +1,6 @@
 import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, decimal } from "drizzle-orm/mysql-core";
 
-export const userRoles = ["citizen", "asha", "cho", "asha_cho", "doctor", "facility_staff", "administrator", "admin"] as const;
+export const userRoles = ["citizen", "asha", "cho", "asha_cho", "doctor", "facility_staff", "administrator", "admin", "super_admin"] as const;
 export type UserRole = (typeof userRoles)[number];
 
 export const accountStatuses = ["PENDING", "APPROVED", "REJECTED", "SUSPENDED"] as const;
@@ -14,7 +14,7 @@ export const users = mysqlTable("users", {
   email: varchar("email", { length: 320 }),
   password: varchar("password", { length: 255 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["citizen", "asha", "cho", "asha_cho", "doctor", "facility_staff", "administrator", "admin"]).default("citizen").notNull(),
+  role: mysqlEnum("role", ["citizen", "asha", "cho", "asha_cho", "doctor", "facility_staff", "administrator", "admin", "super_admin"]).default("citizen").notNull(),
   status: mysqlEnum("status", ["PENDING", "APPROVED", "REJECTED", "SUSPENDED"]).default("APPROVED").notNull(),
   phone: varchar("phone", { length: 40 }),
   dateOfBirth: varchar("dateOfBirth", { length: 30 }),

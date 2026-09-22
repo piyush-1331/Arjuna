@@ -44,6 +44,9 @@ import {
   Lock,
   UserPlus,
   Shield,
+  Edit,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
@@ -76,7 +79,7 @@ export function StaffApprovalsManagementView({
   const [newStaffForm, setNewStaffForm] = useState({
     name: "",
     email: "",
-    role: "doctor" as "doctor" | "asha" | "cho" | "facility_staff" | "administrator",
+    role: "doctor" as "doctor" | "asha" | "cho" | "facility_staff" | "administrator" | "super_admin",
     password: getDefaultRolePassword("doctor"),
     phone: "",
     district: defaultDistrict,
@@ -86,6 +89,25 @@ export function StaffApprovalsManagementView({
     facilityName: "",
     registrationNumber: "",
   });
+
+  // Edit User State
+  const [editUserDialogOpen, setEditUserDialogOpen] = useState<boolean>(false);
+  const [selectedUserForEdit, setSelectedUserForEdit] = useState<any | null>(null);
+  const [editUserForm, setEditUserForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    role: "doctor" as any,
+    district: "Pune",
+    assignedVillage: "",
+    designation: "",
+    employeeId: "",
+    facilityName: "",
+    registrationNumber: "",
+    status: "APPROVED" as any,
+    password: "",
+  });
+  const [showEditPassword, setShowEditPassword] = useState<boolean>(false);
 
   const [rejectDialogOpen, setRejectDialogOpen] = useState<boolean>(false);
   const [selectedUserForReject, setSelectedUserForReject] = useState<any | null>(null);
@@ -100,6 +122,18 @@ export function StaffApprovalsManagementView({
     { district: effectiveDistrict },
     { refetchOnWindowFocus: true }
   );
+
+  const updateUserMutation = trpc.admin.updateUser.useMutation({
+    onSuccess: (data) => {
+      toast.success(data.message || "User details updated successfully!");
+      setEditUserDialogOpen(false);
+      setSelectedUserForEdit(null);
+      utils.admin.listUsers.invalidate();
+    },
+    onError: (err) => {
+      toast.error(err.message || "Failed to update user");
+    },
+  });
 
   const createStaffMutation = trpc.admin.createStaffUser.useMutation({
     onSuccess: (data) => {
@@ -258,10 +292,53 @@ export function StaffApprovalsManagementView({
     reactivateMutation.mutate({ userId: user.id });
   };
 
+  const handleOpenEditUser = (u: any) => {
+    setSelectedUserForEdit(u);
+    setEditUserForm({
+      name: u.name || "",
+      email: u.email || "",
+      phone: u.phone || "",
+      role: u.role || "doctor",
+      district: u.district || defaultDistrict,
+      assignedVillage: u.assignedVillage || u.village || "",
+      designation: u.designation || "",
+      employeeId: u.employeeId || "",
+      facilityName: u.facilityName || "",
+      registrationNumber: u.registrationNumber || "",
+      status: u.status || "APPROVED",
+      password: "",
+    });
+    setShowEditPassword(false);
+    setEditUserDialogOpen(true);
+  };
+
+  const handleSaveEditUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUserForEdit) return;
+    updateUserMutation.mutate({
+      userId: selectedUserForEdit.id,
+      name: editUserForm.name.trim(),
+      email: editUserForm.email.trim(),
+      phone: editUserForm.phone.trim(),
+      role: editUserForm.role,
+      district: editUserForm.district,
+      assignedVillage: editUserForm.assignedVillage.trim(),
+      designation: editUserForm.designation.trim(),
+      employeeId: editUserForm.employeeId.trim(),
+      facilityName: editUserForm.facilityName.trim(),
+      registrationNumber: editUserForm.registrationNumber.trim() || undefined,
+      status: editUserForm.status,
+      password: editUserForm.password.trim() || undefined,
+    });
+  };
+
   const getRoleBadge = (role: string) => {
     switch (role) {
+      case "super_admin":
+        return <Badge className="bg-amber-500 text-slate-950 font-black">🏛️ Super Admin</Badge>;
+      case "administrator":
       case "admin":
-        return <Badge className="bg-purple-100 text-purple-800 border-purple-200">Administrator</Badge>;
+        return <Badge className="bg-purple-100 text-purple-800 border-purple-200">District Admin</Badge>;
       case "doctor":
         return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Doctor</Badge>;
       case "cho":
@@ -502,12 +579,13 @@ export function StaffApprovalsManagementView({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">All Roles</SelectItem>
-                  <SelectItem value="asha">ASHA Workers</SelectItem>
-                  <SelectItem value="cho">Community Health Officers (CHO)</SelectItem>
+                  <SelectItem value="super_admin">🏛️ Super Administrators</SelectItem>
+                  <SelectItem value="admin">District Administrators</SelectItem>
                   <SelectItem value="doctor">Medical Officers / Doctors</SelectItem>
+                  <SelectItem value="cho">Community Health Officers (CHO)</SelectItem>
+                  <SelectItem value="asha">ASHA Workers</SelectItem>
                   <SelectItem value="facility_staff">Facility Staff</SelectItem>
                   <SelectItem value="citizen">Citizens</SelectItem>
-                  <SelectItem value="admin">Administrators</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -713,6 +791,17 @@ export function StaffApprovalsManagementView({
                           Reactivate
                         </Button>
                       )}
+
+                      {/* EDIT USER ACTION */}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleOpenEditUser(user)}
+                        className="border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl text-xs font-semibold"
+                      >
+                        <Edit className="w-3.5 h-3.5 mr-1 text-slate-500" />
+                        Edit
+                      </Button>
 
                       {/* REJECTED ACTIONS (Allow re-evaluating and approving if corrected) */}
                       {user.status === "REJECTED" && (
@@ -1093,6 +1182,227 @@ export function StaffApprovalsManagementView({
                 className="rounded-2xl text-xs font-bold bg-[#15181b] hover:bg-slate-800 text-white shadow-md"
               >
                 {createStaffMutation.isPending ? "Creating & Approving..." : "Add & Approve Staff"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* 4. EDIT USER DETAILS & PERMISSIONS MODAL */}
+      <Dialog open={editUserDialogOpen} onOpenChange={setEditUserDialogOpen}>
+        <DialogContent className="sm:max-w-lg rounded-3xl p-6">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <Badge className="bg-amber-500 text-slate-950 font-black text-xs rounded-full">
+                {isSys ? "🏛️ Super Admin Override" : "📍 District Admin Control"}
+              </Badge>
+            </div>
+            <DialogTitle className="text-xl font-bold mt-1">
+              Edit User · {selectedUserForEdit?.name || selectedUserForEdit?.email}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Modify account role, assigned district, credentials, and verification status.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSaveEditUser} className="space-y-3.5 mt-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700">Full Name *</label>
+              <Input
+                required
+                value={editUserForm.name}
+                onChange={(e) => setEditUserForm({ ...editUserForm, name: e.target.value })}
+                className="rounded-2xl text-xs h-10"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Email Address *</label>
+                <Input
+                  type="email"
+                  required
+                  value={editUserForm.email}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, email: e.target.value })}
+                  className="rounded-2xl text-xs h-10 font-mono"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Phone Number *</label>
+                <Input
+                  required
+                  value={editUserForm.phone}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, phone: e.target.value })}
+                  className="rounded-2xl text-xs h-10"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Account Role *</label>
+                <select
+                  value={editUserForm.role}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, role: e.target.value as any })}
+                  className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium focus:bg-white text-slate-900"
+                >
+                  {isSys && <option value="super_admin">🏛️ Super Administrator (State-Wide)</option>}
+                  <option value="administrator">District Administrator</option>
+                  <option value="doctor">Medical Officer / Doctor</option>
+                  <option value="cho">Community Health Officer (CHO)</option>
+                  <option value="asha">ASHA Worker / Facilitator</option>
+                  <option value="facility_staff">Facility Staff / Pharmacist</option>
+                  <option value="citizen">Citizen</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Account Status *</label>
+                <select
+                  value={editUserForm.status}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, status: e.target.value as any })}
+                  className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium focus:bg-white text-slate-900"
+                >
+                  <option value="APPROVED">APPROVED (Active)</option>
+                  <option value="PENDING">PENDING (Awaiting Approval)</option>
+                  <option value="SUSPENDED">SUSPENDED (Disabled)</option>
+                  <option value="REJECTED">REJECTED</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">District *</label>
+                <select
+                  value={editUserForm.district}
+                  disabled={!isSys}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, district: e.target.value, assignedVillage: "" })}
+                  className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium focus:bg-white text-slate-900 disabled:opacity-75 disabled:bg-slate-100"
+                >
+                  <option value="All Districts (Maharashtra)">All Districts (State-Wide)</option>
+                  {MAHARASHTRA_DISTRICTS.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">City / Village / Taluka</label>
+                <select
+                  value={editUserForm.assignedVillage}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, assignedVillage: e.target.value })}
+                  className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium focus:bg-white text-slate-900"
+                >
+                  <option value="">{editUserForm.district ? "Select City / Village / Taluka" : "Select district first"}</option>
+                  {editUserForm.district && getCitiesForDistrict(editUserForm.district).map((city) => (
+                    <option key={city} value={city}>
+                      {city}
+                    </option>
+                  ))}
+                  {editUserForm.assignedVillage && editUserForm.district && !getCitiesForDistrict(editUserForm.district).includes(editUserForm.assignedVillage) && (
+                    <option value={editUserForm.assignedVillage}>{editUserForm.assignedVillage}</option>
+                  )}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Employee / Worker ID</label>
+                <Input
+                  value={editUserForm.employeeId}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, employeeId: e.target.value })}
+                  className="rounded-2xl bg-slate-50 border-slate-200 h-10 text-xs font-mono"
+                  placeholder="EMP-DOC-102"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Designation / Title</label>
+                <Input
+                  value={editUserForm.designation}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, designation: e.target.value })}
+                  className="rounded-2xl bg-slate-50 border-slate-200 h-10 text-xs"
+                  placeholder="Medical Officer"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Assigned Facility / Hospital</label>
+                <Input
+                  value={editUserForm.facilityName}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, facilityName: e.target.value })}
+                  className="rounded-2xl bg-slate-50 border-slate-200 h-10 text-xs"
+                  placeholder="District Hospital"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Registration Number</label>
+                <Input
+                  value={editUserForm.registrationNumber}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, registrationNumber: e.target.value })}
+                  className="rounded-2xl bg-slate-50 border-slate-200 h-10 text-xs font-mono"
+                  placeholder="MMC/2018/12345"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5 pt-1">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700">
+                  Update Password (leave blank to keep current)
+                </label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEditUserForm({ ...editUserForm, password: getDefaultRolePassword(editUserForm.role) })}
+                  className="text-[11px] h-6 px-2 text-indigo-600 font-semibold"
+                >
+                  Use Role Default
+                </Button>
+              </div>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
+                <Input
+                  type={showEditPassword ? "text" : "password"}
+                  value={editUserForm.password}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, password: e.target.value })}
+                  className="pl-10 pr-10 rounded-2xl text-xs h-10 font-mono"
+                  placeholder="Enter new password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowEditPassword(!showEditPassword)}
+                  className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-600"
+                >
+                  {showEditPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            <DialogFooter className="pt-2 gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setEditUserDialogOpen(false)}
+                className="rounded-2xl text-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={updateUserMutation.isPending}
+                className="rounded-2xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md"
+              >
+                {updateUserMutation.isPending ? "Saving..." : "Save User Changes"}
               </Button>
             </DialogFooter>
           </form>

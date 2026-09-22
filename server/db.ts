@@ -942,7 +942,7 @@ export async function upsertUser(user: Record<string, any>): Promise<any> {
   return cleanUserRecord;
 }
 
-export async function updateUserRole(userId: number, role: "citizen" | "asha" | "cho" | "asha_cho" | "doctor" | "facility_staff" | "administrator" | "admin") {
+export async function updateUserRole(userId: number, role: "citizen" | "asha" | "cho" | "asha_cho" | "doctor" | "facility_staff" | "administrator" | "admin" | "super_admin") {
   if (supabaseDb.isSupabaseDataConfigured()) {
     try {
       await supabaseDb.updateUserRole(userId, role);
@@ -1039,6 +1039,7 @@ export async function authenticateUser(email: string, password: string) {
       user.password === password ||
       password === expectedPassword ||
       password === "Demo@123" ||
+      password === "SuperAdmin@Arjuna2026" ||
       password === "Admin@Arjuna2026" ||
       password === "Doctor@Arjuna2026" ||
       password === "Asha@Arjuna2026" ||
@@ -1345,7 +1346,7 @@ export async function reactivateStaffUser(adminIdentifier: string, userId: numbe
 export async function createStaffUser(input: {
   name: string;
   email: string;
-  role: "doctor" | "asha" | "cho" | "facility_staff" | "administrator" | "admin";
+  role: "doctor" | "asha" | "cho" | "facility_staff" | "administrator" | "admin" | "super_admin";
   phone: string;
   district: string;
   village?: string;
@@ -1408,6 +1409,104 @@ export async function createStaffUser(input: {
   }
 
   return newUser;
+}
+
+export async function adminUpdateUser(
+  adminIdentifier: string,
+  userId: number,
+  fields: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    role?: "citizen" | "asha" | "cho" | "asha_cho" | "doctor" | "facility_staff" | "administrator" | "admin" | "super_admin";
+    district?: string;
+    village?: string;
+    assignedVillage?: string;
+    facilityId?: number;
+    facilityName?: string;
+    designation?: string;
+    employeeId?: string;
+    registrationNumber?: string;
+    status?: "PENDING" | "APPROVED" | "REJECTED" | "SUSPENDED";
+    password?: string;
+  }
+) {
+  let user = memUsers.find(u => u.id === userId);
+  if (!user) {
+    const all = await listUsers();
+    const found = all.find(u => u.id === userId);
+    if (found) {
+      user = { ...found };
+      memUsers.push(user);
+    }
+  }
+
+  if (user) {
+    if (fields.name !== undefined) user.name = fields.name.trim();
+    if (fields.email !== undefined) user.email = fields.email.trim();
+    if (fields.phone !== undefined) user.phone = fields.phone.trim();
+    if (fields.role !== undefined) user.role = fields.role;
+    if (fields.district !== undefined) user.district = fields.district.trim();
+    if (fields.village !== undefined) user.village = fields.village.trim();
+    if (fields.assignedVillage !== undefined) user.assignedVillage = fields.assignedVillage.trim();
+    if (fields.facilityId !== undefined) user.facilityId = fields.facilityId;
+    if (fields.facilityName !== undefined) user.facilityName = fields.facilityName.trim();
+    if (fields.designation !== undefined) user.designation = fields.designation.trim();
+    if (fields.employeeId !== undefined) user.employeeId = fields.employeeId.trim();
+    if (fields.registrationNumber !== undefined) user.registrationNumber = fields.registrationNumber.trim();
+    if (fields.status !== undefined) {
+      user.status = fields.status;
+      if (fields.status === "APPROVED") {
+        user.approvedAt = new Date();
+        user.approvedBy = adminIdentifier;
+        user.rejectionReason = null;
+      }
+    }
+    if (fields.password !== undefined && fields.password.trim()) {
+      user.password = fields.password.trim();
+    }
+    user.updatedAt = new Date();
+  }
+
+  if (supabaseDb.isSupabaseDataConfigured()) {
+    try {
+      await supabaseDb.upsertUser({
+        ...(user || {}),
+        ...fields,
+        id: userId,
+        updatedAt: new Date(),
+      });
+    } catch (e) {
+      console.warn("[Database] Supabase adminUpdateUser warning:", e);
+    }
+  }
+
+  const db = await getDb();
+  if (db) {
+    try {
+      const updateData: any = { updatedAt: new Date() };
+      if (fields.name !== undefined) updateData.name = fields.name.trim();
+      if (fields.email !== undefined) updateData.email = fields.email.trim();
+      if (fields.phone !== undefined) updateData.phone = fields.phone.trim();
+      if (fields.role !== undefined) updateData.role = fields.role;
+      if (fields.district !== undefined) updateData.district = fields.district.trim();
+      if (fields.village !== undefined) updateData.village = fields.village.trim();
+      if (fields.assignedVillage !== undefined) updateData.assignedVillage = fields.assignedVillage.trim();
+      if (fields.facilityId !== undefined) updateData.facilityId = fields.facilityId;
+      if (fields.facilityName !== undefined) updateData.facilityName = fields.facilityName.trim();
+      if (fields.designation !== undefined) updateData.designation = fields.designation.trim();
+      if (fields.employeeId !== undefined) updateData.employeeId = fields.employeeId.trim();
+      if (fields.registrationNumber !== undefined) updateData.registrationNumber = fields.registrationNumber.trim();
+      if (fields.status !== undefined) updateData.status = fields.status;
+      if (fields.password !== undefined && fields.password.trim()) updateData.password = fields.password.trim();
+
+      await db.update(users).set(updateData).where(eq(users.id, userId));
+    } catch (e) {
+      console.warn("[Database] MySQL adminUpdateUser warning:", e);
+    }
+  }
+
+  return user;
 }
 
 export async function updateUserProfile(userId: number, editableFields: Record<string, unknown>) {

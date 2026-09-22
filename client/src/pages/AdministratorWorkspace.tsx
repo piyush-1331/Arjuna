@@ -24,6 +24,7 @@ import {
 } from "recharts";
 import { StaffApprovalsManagementView } from "@/components/StaffApprovalsManagementView";
 import { FacilitiesManagementView } from "@/components/FacilitiesManagementView";
+import { DistrictAdminsManagementView } from "@/components/DistrictAdminsManagementView";
 import {
   Activity,
   AlertCircle,
@@ -62,6 +63,8 @@ import {
   Eye,
   X,
   UserPlus,
+  Building2,
+  Award,
 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import {
@@ -105,6 +108,7 @@ export default function AdministratorWorkspace() {
   const notifsQuery = trpc.notifications.list.useQuery(undefined, { enabled: isAuthenticated, staleTime: 10000 });
   const usersQuery = trpc.admin.listUsers.useQuery({ district: effectiveDistrict }, { enabled: isAuthenticated, staleTime: 15000 });
   const facilitiesQuery = trpc.facilities.list.useQuery({ district: effectiveDistrict }, { enabled: isAuthenticated, staleTime: 15000 });
+  const districtAdminsQuery = trpc.admin.listDistrictAdmins.useQuery(undefined, { enabled: isAuthenticated && isSys, staleTime: 15000 });
   const districtForecastQuery = trpc.demandForecasting.getDistrictForecasts.useQuery(
     { district: effectiveDistrict || "Pune" },
     { enabled: isAuthenticated, staleTime: 30000 }
@@ -133,6 +137,16 @@ export default function AdministratorWorkspace() {
 
   const navItems: NavItem[] = [
     { id: "command_center", label: "Command Center", icon: Activity },
+    ...(isSys
+      ? [
+          {
+            id: "district_admins",
+            label: "District Admins & Super Admins",
+            icon: ShieldCheck,
+            badge: districtAdminsQuery.data?.districtAdmins?.length || 37,
+          },
+        ]
+      : []),
     { id: "staff_approvals", label: "Staff Approvals & Users", icon: UserCheck, badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : undefined },
     { id: "facilities", label: "Facilities & GIS Map", icon: Hospital, badge: facilitiesQuery.data?.length || undefined },
     { id: "households", label: "Households & Families", icon: Home, badge: households.data?.length || undefined },
@@ -157,6 +171,8 @@ export default function AdministratorWorkspace() {
       title={
         activeTab === "command_center"
           ? "District Health Command Center"
+          : activeTab === "district_admins"
+          ? "District Administrators & Super Admins Directory"
           : activeTab === "staff_approvals"
           ? "Staff Registration Approvals & Role Governance"
           : activeTab === "facilities"
@@ -249,6 +265,11 @@ export default function AdministratorWorkspace() {
       {/* 1. COMMAND CENTER VIEW */}
       {activeTab === "command_center" && (
         <DistrictCommandCenterView initialDistrict={selectedDistrict === "all" ? (user?.district || "Pune") : selectedDistrict} />
+      )}
+
+      {/* DISTRICT ADMINISTRATORS & SUPER ADMINS (SUPER ADMIN ONLY) */}
+      {activeTab === "district_admins" && (
+        <DistrictAdminsManagementView isSystemAdmin={isSys} />
       )}
 
       {/* STAFF APPROVALS & USER MANAGEMENT VIEW */}

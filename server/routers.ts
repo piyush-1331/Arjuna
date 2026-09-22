@@ -1,5 +1,5 @@
 import { COOKIE_NAME } from "@shared/const";
-import { getDistrictForCityOrVillage, isSystemAdmin } from "@shared/maharashtraLocations";
+import { getDistrictForCityOrVillage, isSystemAdmin, DISTRICT_ADMIN_ACCOUNTS, SUPER_ADMIN_ACCOUNT, SYSTEM_ADMIN_ACCOUNT } from "@shared/maharashtraLocations";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, approvedProcedure, careTeamProcedure, doctorProcedure, facilityStaffProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -79,6 +79,7 @@ import {
   reactivateStaffUser,
   createFacility,
   createStaffUser,
+  adminUpdateUser,
   updateUserProfile,
   resetDemoEnvironment,
   authenticateUser,
@@ -3761,7 +3762,7 @@ export const appRouter = router({
         z.object({
           name: z.string().min(2, "Name is required"),
           email: z.string().email("Valid email is required"),
-          role: z.enum(["doctor", "asha", "cho", "facility_staff", "administrator", "admin"]),
+          role: z.enum(["doctor", "asha", "cho", "facility_staff", "administrator", "admin", "super_admin"]),
           phone: z.string().min(6, "Valid phone number is required"),
           district: z.string().min(1, "District is required"),
           village: z.string().optional(),
@@ -3787,6 +3788,13 @@ export const appRouter = router({
           }
         }
 
+        if (input.role === "super_admin" && !isSys) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Only Super Administrators can create other Super Administrator accounts.",
+          });
+        }
+
         const newUser = await createStaffUser(input);
 
         await createAuditEvent({
@@ -3794,7 +3802,7 @@ export const appRouter = router({
           action: "STAFF_CREATED_MANUALLY",
           entityType: "profile",
           entityId: newUser.id,
-          detail: `Staff member ${input.name} (${input.role}) in ${input.district} registered manually and auto-approved by admin #${ctx.user.id}`,
+          detail: `Account ${input.name} (${input.role}) in ${input.district} registered manually and auto-approved by admin #${ctx.user.id}`,
         });
 
         await dispatchNotification({
@@ -3804,14 +3812,111 @@ export const appRouter = router({
           recipientEmail: input.email,
           recipientPhone: input.phone,
           title: "Account Created & Approved",
-          message: `Your healthcare staff account (${input.role.toUpperCase()}) has been provisioned and approved by the district health administrator.`,
+          message: `Your account (${input.role.toUpperCase()}) has been provisioned and approved by the health administrator.`,
           priority: "routine",
         });
 
         return {
           success: true,
           user: newUser,
-          message: `Staff member "${input.name}" (${input.role.toUpperCase()}) created & approved with login password: ${newUser.password}`,
+          message: `Account "${input.name}" (${input.role.toUpperCase()}) created & approved with login password: ${newUser.password}`,
+        };
+      }),
+
+    updateUser: adminProcedure
+      .input(
+        z.object({
+          userId: z.number(),
+          name: z.string().optional(),
+          email: z.string().email("Valid email required").optional(),
+          phone: z.string().optional(),
+          role: z.enum(["doctor", "asha", "cho", "facility_staff", "administrator", "admin", "citizen", "super_admin"]).optional(),
+          district: z.string().optional(),
+          village: z.string().optional(),
+          assignedVillage: z.string().optional(),
+          facilityId: z.number().optional(),
+          facilityName: z.string().optional(),
+          designation: z.string().optional(),
+          employeeId: z.string().optional(),
+          registrationNumber: z.string().optional(),
+          status: z.enum(["PENDING", "APPROVED", "REJECTED", "SUSPENDED"]).optional(),
+          password: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const target = await getUserById(input.userId);
+        if (!target) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "User account not found." });
+        }
+        const isSys = isSystemAdmin(ctx.user);
+
+        // District admin can only edit users within their assigned district
+        if (!isSys && ctx.user.district && target.district) {
+          const userDist = ctx.user.district.toLowerCase();
+          const targetDist = target.district.toLowerCase();
+          if (userDist !== targetDist && !targetDist.includes(userDist) && !userDist.includes(targetDist)) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: `District Administrators can only edit accounts in their assigned district (${ctx.user.district}).`,
+            });
+          }
+        }
+
+        // Only Super Admin can change someone to super_admin or change district of an admin
+        if (input.role === "super_admin" && !isSys) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Only Super Administrators can assign the Super Admin role.",
+          });
+        }
+
+        const adminIdent = ctx.user.email || ctx.user.openId || "admin";
+        const updated = await adminUpdateUser(adminIdent, input.userId, input);
+
+        await createAuditEvent({
+          actorId: ctx.user.id,
+          action: "USER_UPDATED_BY_ADMIN",
+          entityType: "profile",
+          entityId: input.userId,
+          detail: `User #${input.userId} (${updated?.name || updated?.email}) updated by admin #${ctx.user.id}`,
+        });
+
+        return {
+          success: true,
+          user: updated,
+          message: `User details updated successfully for "${updated?.name || updated?.email}".`,
+        };
+      }),
+
+    listDistrictAdmins: adminProcedure
+      .query(async ({ ctx }) => {
+        const isSys = isSystemAdmin(ctx.user);
+        const allUsers = await listUsers();
+        const adminUsers = allUsers.filter(u => u.role === "admin" || u.role === "administrator" || u.role === "super_admin" || u.isSystemAdmin);
+
+        const districtAdminList = DISTRICT_ADMIN_ACCOUNTS.map(pre => {
+          const match = adminUsers.find(
+            u => (u.email || "").toLowerCase() === pre.email.toLowerCase()
+          );
+          return {
+            id: match?.id || pre.id,
+            name: match?.name || pre.name,
+            email: pre.email,
+            district: pre.district,
+            division: pre.division,
+            headquarters: pre.headquarters,
+            phone: match?.phone || pre.phone,
+            role: match?.role || pre.role,
+            status: match?.status || "APPROVED",
+            isSystemAdmin: Boolean(pre.isSystemAdmin || match?.role === "super_admin"),
+            isSuperAdmin: pre.id === "super-admin-state" || pre.email === "superadmin@arjuna.gov.in" || match?.role === "super_admin",
+          };
+        });
+
+        return {
+          isSystemAdmin: isSys,
+          districtAdmins: districtAdminList,
+          totalCount: districtAdminList.length,
         };
       }),
 
@@ -3850,10 +3955,10 @@ export const appRouter = router({
         if (!target) {
           throw new TRPCError({ code: "NOT_FOUND", message: "User account not found." });
         }
-        if (target.role === "admin" || target.role === "administrator") {
+        const isSys = isSystemAdmin(ctx.user);
+        if ((target.role === "admin" || target.role === "administrator" || target.role === "super_admin") && !isSys) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Administrator account is already active." });
         }
-        const isSys = isSystemAdmin(ctx.user);
         if (!isSys && ctx.user.district && target.district) {
           const userDist = ctx.user.district.toLowerCase();
           const targetDist = target.district.toLowerCase();
@@ -3873,7 +3978,7 @@ export const appRouter = router({
           recipientName: target.name || "Staff Member",
           recipientEmail: target.email || undefined,
           title: "Registration Approved",
-          message: "Your healthcare staff registration has been approved. You can now log in to Arjuna.",
+          message: "Your healthcare account has been approved. You can now log in to Arjuna.",
           priority: "routine",
         });
 
@@ -3882,7 +3987,7 @@ export const appRouter = router({
           action: "STAFF_APPROVED",
           entityType: "profile",
           entityId: target.id,
-          detail: `Healthcare staff account #${target.id} (${target.name || target.email}) approved by administrator #${ctx.user.id}`,
+          detail: `Account #${target.id} (${target.name || target.email}) approved by administrator #${ctx.user.id}`,
         });
 
         return { success: true, message: "Staff account approved successfully." };
@@ -3908,10 +4013,10 @@ export const appRouter = router({
         if (!target) {
           throw new TRPCError({ code: "NOT_FOUND", message: "User account not found." });
         }
-        if (target.role === "admin" || target.role === "administrator") {
-          throw new TRPCError({ code: "FORBIDDEN", message: "The main administrator account cannot be rejected." });
-        }
         const isSys = isSystemAdmin(ctx.user);
+        if (target.email === "superadmin@arjuna.gov.in" || target.email === "admin@arjuna.gov.in" || (target.role === "super_admin" && !isSys)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "The super administrator account cannot be rejected." });
+        }
         if (!isSys && ctx.user.district && target.district) {
           const userDist = ctx.user.district.toLowerCase();
           const targetDist = target.district.toLowerCase();
@@ -3940,7 +4045,7 @@ export const appRouter = router({
           action: "STAFF_REJECTED",
           entityType: "profile",
           entityId: target.id,
-          detail: `Healthcare staff account #${target.id} rejected by admin #${ctx.user.id}. Reason: ${reason}`,
+          detail: `Account #${target.id} rejected by admin #${ctx.user.id}. Reason: ${reason}`,
         });
 
         return { success: true, message: "Staff registration rejected." };
@@ -3953,10 +4058,13 @@ export const appRouter = router({
         if (!target) {
           throw new TRPCError({ code: "NOT_FOUND", message: "User account not found." });
         }
-        if (target.role === "admin" || target.role === "administrator" || target.id === ctx.user.id) {
+        const isSys = isSystemAdmin(ctx.user);
+        if (target.email === "superadmin@arjuna.gov.in" || target.email === "admin@arjuna.gov.in" || target.id === ctx.user.id) {
           throw new TRPCError({ code: "FORBIDDEN", message: "The main administrator account cannot be suspended." });
         }
-        const isSys = isSystemAdmin(ctx.user);
+        if (target.role === "super_admin" && !isSys) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Only super administrators can suspend super administrator accounts." });
+        }
         if (!isSys && ctx.user.district && target.district) {
           const userDist = ctx.user.district.toLowerCase();
           const targetDist = target.district.toLowerCase();

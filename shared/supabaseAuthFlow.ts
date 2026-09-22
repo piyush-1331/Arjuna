@@ -1,6 +1,6 @@
 import { validatePasswordStrength, PASSWORDS_MUST_MATCH_ERROR } from "./passwordPolicy";
 
-export type UserRole = "citizen" | "asha" | "cho" | "doctor" | "facility_staff" | "admin" | "administrator" | "asha_cho";
+export type UserRole = "citizen" | "asha" | "cho" | "doctor" | "facility_staff" | "admin" | "administrator" | "asha_cho" | "super_admin";
 export type AccountStatus = "PENDING" | "APPROVED" | "REJECTED" | "SUSPENDED";
 
 export type HealthcareStaffRole = "asha" | "cho" | "doctor" | "facility_staff";

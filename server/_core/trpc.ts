@@ -87,7 +87,7 @@ export const adminProcedure = t.procedure.use(
       throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
     }
 
-    if (!["admin", "administrator"].includes(ctx.user.role)) {
+    if (!["admin", "administrator", "super_admin"].includes(ctx.user.role)) {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }
 
@@ -99,13 +99,16 @@ export const adminProcedure = t.procedure.use(
       });
     }
 
-    // Verify configured ADMIN_EMAIL matches or user is an official district administrator
+    // Verify configured ADMIN_EMAIL matches or user is an official district administrator or super administrator
     const configuredAdminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
     const userEmail = ctx.user.email?.toLowerCase() || "";
     const isPredefinedAdmin =
       userEmail.startsWith("admin.") ||
+      userEmail.startsWith("superadmin") ||
       userEmail === "admin@arjuna.gov.in" ||
+      userEmail === "superadmin@arjuna.gov.in" ||
       userEmail === "state.admin@arjuna.gov.in" ||
+      ctx.user.role === "super_admin" ||
       Boolean((ctx.user as any).isSystemAdmin);
 
     if (configuredAdminEmail && userEmail !== configuredAdminEmail && !isPredefinedAdmin) {

@@ -2,7 +2,7 @@ export type OnboardingRole = "citizen" | "asha" | "cho" | "asha_cho" | "doctor" 
 export type AccountStatus = "PENDING" | "APPROVED" | "REJECTED" | "SUSPENDED";
 
 export function normalizeDashboardRole(role: string): string {
-  if (role === "admin") return "administrator";
+  if (role === "admin" || role === "super_admin" || role === "superadmin") return "administrator";
   return role;
 }
 
