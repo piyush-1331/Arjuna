@@ -39,6 +39,7 @@ import {
   WifiOff,
   X,
 } from "lucide-react";
+import { AshaHealthAiView } from "@/components/AshaHealthAiView";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
 import {
   getLocalEntities,
@@ -442,6 +443,7 @@ export default function AshaChoWorkspace() {
     { id: "patients", label: "Patients & Beneficiaries", icon: FileHeart, badge: allPatients.length },
     { id: "screening", label: "Screening Desk", icon: HeartPulse },
     { id: "high_risk", label: "High-Risk Cases", icon: ShieldAlert, badge: highRiskPatients.length },
+    { id: "asha_ai", label: "ASHA Health Copilot", icon: Sparkles },
     {
       id: "follow_ups",
       label: "Follow-ups",
@@ -1404,6 +1406,15 @@ export default function AshaChoWorkspace() {
             ))}
           </div>
         </div>
+      )}
+
+      {/* ASHA HEALTH COPILOT VIEW */}
+      {activeTab === "asha_ai" && (
+        <AshaHealthAiView
+          userVillage={userVillage}
+          userDistrict={userDistrict}
+          patientsList={allPatients}
+        />
       )}
 
       {/* 9. OFFLINE SYNC VIEW */}

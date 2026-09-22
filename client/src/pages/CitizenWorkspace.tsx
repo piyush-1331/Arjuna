@@ -83,16 +83,17 @@ export default function CitizenWorkspace() {
   });
 
   // AI Assistant Chat State
-  const [chatMessages, setChatMessages] = useState<Array<{ sender: "user" | "ai"; text: string; action?: string; time: string }>>([
+  const [chatMessages, setChatMessages] = useState<Array<{ sender: "user" | "ai"; text: string; action?: string; urgency?: string; time: string }>>([
     {
       sender: "ai",
-      text: `Namaste ${user?.name ? user.name.split(" ")[0] + " ji" : "ji"}. I am your Arjuna health assistant. You can ask about your symptoms, medicines, diet tips, or nearby health services in English, Hindi, or Gujarati.`,
+      text: `Namaste ${user?.name ? user.name.split(" ")[0] + " ji" : "ji"}. I am your Arjuna AI Health Assistant powered by Gemini. You can ask about symptoms, medicines, diet, pregnancy, vaccinations, or nearby Maharashtra health centres in English, मराठी, हिंदी, or ગુજરાતી.`,
       action: "Check your morning blood pressure reading",
       time: "Just now",
     },
   ]);
   const [inputMsg, setInputMsg] = useState("");
-  const [language, setLanguage] = useState<"en" | "hi" | "gu">("en");
+  const [language, setLanguage] = useState<"en" | "mr" | "hi" | "gu">("en");
+  const quickPrompts = trpc.aiAssistant.getQuickPrompts.useQuery({ role: "citizen", language });
 
   // Queries
   const utils = trpc.useUtils();
@@ -535,6 +536,7 @@ export default function CitizenWorkspace() {
           sender: "ai",
           text: data.reply,
           action: data.recommendedAction,
+          urgency: data.urgency,
           time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         },
       ]);
@@ -583,21 +585,33 @@ export default function CitizenWorkspace() {
     }
   );
 
-  const handleSendMessage = () => {
-    if (!inputMsg.trim()) return;
-    const msg = inputMsg;
+  const handleSendMessage = (customMsg?: string) => {
+    const text = (customMsg || inputMsg).trim();
+    if (!text || aiChat.isPending) return;
+
     setChatMessages((prev) => [
       ...prev,
-      { sender: "user", text: msg, time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) },
+      {
+        sender: "user",
+        text,
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      },
     ]);
     setInputMsg("");
+
     aiChat.mutate({
-      message: msg,
+      message: text,
+      role: "citizen",
       language,
+      district: displayDistrict,
+      facilityName: displayFacilityName,
       patientContext: {
-        age: displayAge ? Number(displayAge) : undefined,
-        conditions: displayConditions !== "None declared" ? displayConditions : undefined,
-        recentVitals: latestBp ? `BP: ${latestBp}${latestGlucose ? `, Glucose: ${latestGlucose}` : ""}` : undefined,
+        name: displayName,
+        age: displayAge,
+        gender: displayGender,
+        conditions: displayConditions,
+        currentMedications: activePrescriptions.map((p) => p.medicineName).join(", "),
+        allergies: displayAllergies,
       },
     });
   };
@@ -2053,34 +2067,46 @@ export default function CitizenWorkspace() {
 
       {/* 10. AI ASSISTANT VIEW */}
       {activeTab === "ai_assistant" && (
-        <Card className="border-0 shadow-xs bg-white flex flex-col h-[650px]">
+        <Card className="border-0 shadow-xs bg-white flex flex-col h-[700px]">
           <CardHeader className="border-b border-slate-100 pb-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="grid h-10 w-10 place-items-center rounded-2xl bg-[#15181b] text-white">
+                <div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-tr from-[#15181b] via-[#232930] to-[#1e3a5f] text-white shadow-sm">
                   <Sparkles className="h-5 w-5 text-[#8dc5e3]" />
                 </div>
                 <div>
-                  <CardTitle className="display-font text-lg font-bold">Arjuna Health Assistant</CardTitle>
-                  <CardDescription className="text-xs">Multilingual rural health triage & safe guidance</CardDescription>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="display-font text-lg font-bold">Arjuna AI Health Assistant</CardTitle>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 border border-blue-200">
+                      <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                      Gemini 3.6 Flash
+                    </span>
+                  </div>
+                  <CardDescription className="text-xs">Maharashtra public health triage, maternal care, & safe clinic guidance</CardDescription>
                 </div>
               </div>
-              <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl shrink-0">
                 <button
                   onClick={() => setLanguage("en")}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${language === "en" ? "bg-white shadow-xs text-black" : "text-slate-500"}`}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${language === "en" ? "bg-white shadow-xs text-black" : "text-slate-600 hover:text-black"}`}
                 >
                   English
                 </button>
                 <button
+                  onClick={() => setLanguage("mr")}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${language === "mr" ? "bg-white shadow-xs text-black" : "text-slate-600 hover:text-black"}`}
+                >
+                  मराठी
+                </button>
+                <button
                   onClick={() => setLanguage("hi")}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${language === "hi" ? "bg-white shadow-xs text-black" : "text-slate-500"}`}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${language === "hi" ? "bg-white shadow-xs text-black" : "text-slate-600 hover:text-black"}`}
                 >
                   हिंदी
                 </button>
                 <button
                   onClick={() => setLanguage("gu")}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${language === "gu" ? "bg-white shadow-xs text-black" : "text-slate-500"}`}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${language === "gu" ? "bg-white shadow-xs text-black" : "text-slate-600 hover:text-black"}`}
                 >
                   ગુજરાતી
                 </button>
@@ -2088,20 +2114,54 @@ export default function CitizenWorkspace() {
             </div>
           </CardHeader>
 
+          {/* Quick Prompts Bar */}
+          {quickPrompts.data?.prompts && quickPrompts.data.prompts.length > 0 && (
+            <div className="flex items-center gap-2 overflow-x-auto px-4 py-2 bg-slate-50/80 border-b border-slate-100 no-scrollbar">
+              <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 shrink-0">Quick Topics:</span>
+              {quickPrompts.data.prompts.map((promptText, pIdx) => (
+                <button
+                  key={pIdx}
+                  onClick={() => handleSendMessage(promptText)}
+                  disabled={aiChat.isPending}
+                  className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium text-slate-700 hover:border-blue-300 hover:bg-blue-50/50 hover:text-blue-700 transition-colors shadow-2xs"
+                >
+                  {promptText}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Chat Stream */}
           <CardContent className="flex-1 overflow-y-auto p-4 space-y-3.5">
             {chatMessages.map((msg, i) => (
               <div key={i} className={`flex flex-col ${msg.sender === "user" ? "items-end" : "items-start"}`}>
                 <div
-                  className={`max-w-[85%] sm:max-w-[70%] rounded-2xl p-4 text-xs leading-relaxed ${
+                  className={`max-w-[88%] sm:max-w-[75%] rounded-2xl p-4 text-xs leading-relaxed ${
                     msg.sender === "user"
-                      ? "bg-[#15181b] text-white rounded-br-none"
-                      : "bg-[#f0f5f9] text-slate-800 rounded-bl-none"
+                      ? "bg-[#15181b] text-white rounded-br-none shadow-sm"
+                      : "bg-[#f0f5f9] text-slate-800 rounded-bl-none border border-slate-200/50 shadow-2xs"
                   }`}
                 >
-                  <p>{msg.text}</p>
+                  <p className="whitespace-pre-line">{msg.text}</p>
+                  {msg.urgency === "emergency" && (
+                    <div className="mt-3 rounded-xl bg-red-600 text-white p-3 flex items-center justify-between gap-2 shadow-sm animate-pulse">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="h-5 w-5 shrink-0 text-white" />
+                        <div>
+                          <div className="font-bold text-xs">Medical Emergency Detected</div>
+                          <div className="text-[10px] text-red-100">Call Maharashtra Emergency Ambulance immediately</div>
+                        </div>
+                      </div>
+                      <a
+                        href="tel:108"
+                        className="rounded-lg bg-white px-3 py-1 text-xs font-bold text-red-700 hover:bg-red-50 shrink-0 shadow-2xs"
+                      >
+                        Dial 108
+                      </a>
+                    </div>
+                  )}
                   {msg.action && (
-                    <div className="mt-2.5 rounded-xl bg-white/80 p-2.5 text-slate-900 font-bold border border-black/5">
+                    <div className="mt-2.5 rounded-xl bg-white/90 p-2.5 text-slate-900 font-bold border border-black/5 text-[11px]">
                       Recommended Action: {msg.action}
                     </div>
                   )}
@@ -2110,9 +2170,9 @@ export default function CitizenWorkspace() {
               </div>
             ))}
             {aiChat.isPending && (
-              <div className="flex items-center gap-2 text-xs text-slate-500 p-2">
+              <div className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50/80 p-3 rounded-xl border border-blue-100 w-fit">
                 <Sparkles className="h-4 w-4 animate-spin text-blue-500" />
-                <span>Reviewing health guidelines and calculating safety-net advice…</span>
+                <span>Consulting Arjuna Gemini Clinical Engine with Maharashtra health guidelines…</span>
               </div>
             )}
           </CardContent>
@@ -2124,15 +2184,21 @@ export default function CitizenWorkspace() {
               onChange={(e) => setInputMsg(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
               placeholder={
-                language === "gu"
+                language === "mr"
+                  ? "आपली लक्षणे, औषधे किंवा आरोग्य विषयक प्रश्न विचारा..."
+                  : language === "gu"
                   ? "તમારા લક્ષણો અથવા દવા વિશે પૂછો..."
                   : language === "hi"
                   ? "अपने लक्षण या दवा के बारे में पूछें..."
-                  : "Type symptoms, medicine questions, or health queries..."
+                  : "Type symptoms, medicine questions, pregnancy advice, or health queries..."
               }
-              className="rounded-full border-slate-200 bg-white text-xs"
+              className="rounded-full border-slate-200 bg-white text-xs py-5 px-4 shadow-2xs"
             />
-            <Button onClick={handleSendMessage} disabled={aiChat.isPending || !inputMsg.trim()} className="rounded-full bg-[#15181b] px-4 text-white">
+            <Button
+              onClick={() => handleSendMessage()}
+              disabled={aiChat.isPending || !inputMsg.trim()}
+              className="rounded-full bg-[#15181b] px-4 text-white hover:bg-slate-800 transition-colors shrink-0 shadow-sm"
+            >
               <Send className="h-4 w-4" />
             </Button>
           </div>

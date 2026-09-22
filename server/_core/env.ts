@@ -1,3 +1,5 @@
+import "dotenv/config";
+
 export const ENV = {
   appId: process.env.VITE_APP_ID ?? "",
   cookieSecret: process.env.JWT_SECRET ?? "",
@@ -10,4 +12,6 @@ export const ENV = {
   supabaseUrl: process.env.VITE_SUPABASE_URL ?? "",
   supabasePublishableKey: process.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "",
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
+  geminiApiKey: process.env.GEMINI_API_KEY ?? "",
 };
+

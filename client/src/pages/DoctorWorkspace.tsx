@@ -41,6 +41,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { DoctorClinicalAiView } from "@/components/DoctorClinicalAiView";
 
 export default function DoctorWorkspace() {
   const { user, isAuthenticated } = useAuth();
@@ -320,6 +321,7 @@ export default function DoctorWorkspace() {
     { id: "today_patients", label: "Today's OPD Queue", icon: Users, badge: todayOpd.length },
     { id: "high_risk", label: "High-Risk Cases", icon: ShieldAlert, badge: highRiskCases.length },
     { id: "consultations", label: "Consultation Desk", icon: Stethoscope },
+    { id: "clinical_ai", label: "Clinical AI Copilot", icon: Sparkles },
     { id: "patient_history", label: "Patient EHR History", icon: FileText },
     { id: "referrals", label: "Inbound Referrals", icon: Navigation, badge: activeReferrals.length },
     { id: "prescriptions", label: "Prescriptions", icon: Pill, badge: prescriptions.data?.length },
@@ -341,6 +343,8 @@ export default function DoctorWorkspace() {
           ? "High-Risk & Critical Case Reviews"
           : activeTab === "consultations"
           ? "Active Consultation & Encounter Room"
+          : activeTab === "clinical_ai"
+          ? "Arjuna Clinical AI Copilot & Drug Safety"
           : activeTab === "patient_history"
           ? "Patient Longitudinal EHR History"
           : activeTab === "referrals"
@@ -1511,6 +1515,16 @@ export default function DoctorWorkspace() {
             </div>
           )}
         </div>
+      )}
+
+      {/* CLINICAL AI COPILOT VIEW */}
+      {activeTab === "clinical_ai" && (
+        <DoctorClinicalAiView
+          currentPatientId={consultForm.patientId}
+          patientsList={patients.data || []}
+          userDistrict={user?.district || "Pune"}
+          facilityName={user?.facilityName || "Primary Health Centre"}
+        />
       )}
 
       {/* 5. PATIENT HISTORY VIEW */}

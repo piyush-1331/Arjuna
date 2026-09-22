@@ -112,6 +112,12 @@ import {
   CLINICAL_SUMMARY_DISCLAIMER,
 } from "./decisionSupport";
 import {
+  invokeGeminiChat,
+  getQuickPromptsForRole,
+  AssistantRole,
+  SupportedLanguage,
+} from "./_core/gemini";
+import {
   determineMedicineAvailability,
   batchCheckMedicineAvailability,
   searchFacilitiesForMedicine,
@@ -3150,72 +3156,125 @@ export const appRouter = router({
       return getAIInsights();
     }),
   }),
+  ai: router({
+    chat: protectedProcedure.input(z.object({
+      message: z.string().min(1),
+      messages: z.array(z.object({
+        role: z.string(),
+        content: z.string(),
+      })).optional(),
+      role: z.enum(["citizen", "doctor", "asha", "cho", "facility_staff", "administrator", "super_admin", "admin"]).optional(),
+      language: z.enum(["en", "mr", "hi", "gu"]).default("en"),
+    })).mutation(async ({ input, ctx }) => {
+      const prompt = input.message || (input.messages && input.messages.length > 0 ? input.messages[input.messages.length - 1].content : "");
+      const userRole = (input.role || ctx.user?.role || "citizen") as AssistantRole;
+      const result = await invokeGeminiChat({
+        prompt,
+        role: userRole,
+        language: input.language as SupportedLanguage,
+        district: ctx.user?.district || undefined,
+      });
+      return {
+        ...result,
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              content: result.reply,
+            },
+          },
+        ],
+      };
+    }),
+  }),
   aiAssistant: router({
     chat: protectedProcedure.input(z.object({
       message: z.string().min(1),
-      language: z.enum(["en", "hi", "gu"]).default("en"),
+      role: z.enum(["citizen", "doctor", "asha", "cho", "facility_staff", "administrator", "super_admin", "admin"]).optional(),
+      language: z.enum(["en", "mr", "hi", "gu"]).default("en"),
+      district: z.string().optional(),
+      facilityName: z.string().optional(),
       patientContext: z.object({
+        name: z.string().optional(),
         age: z.number().optional(),
+        gender: z.string().optional(),
         conditions: z.string().optional(),
         recentVitals: z.string().optional(),
+        currentMedications: z.string().optional(),
+        allergies: z.string().optional(),
       }).optional(),
-    })).mutation(async ({ input }) => {
-      const msg = input.message.toLowerCase();
-      const isEmergency = msg.includes("chest pain") || msg.includes("severe breath") || msg.includes("unconscious") || msg.includes("bleeding heavily") || msg.includes("stroke");
-      const isHypertension = msg.includes("bp") || msg.includes("blood pressure") || msg.includes("dizziness") || msg.includes("headache");
-      const isDiabetes = msg.includes("sugar") || msg.includes("glucose") || msg.includes("thirst") || msg.includes("diabetes");
-      const isPregnancy = msg.includes("pregnancy") || msg.includes("anc") || msg.includes("baby") || msg.includes("trimester");
+    })).mutation(async ({ input, ctx }) => {
+      const userRole = (input.role || ctx.user?.role || "citizen") as AssistantRole;
+      const userDistrict = input.district || ctx.user?.district || undefined;
+      const facilityName = input.facilityName || (ctx.user as any)?.facilityName || undefined;
 
-      let reply = "";
-      let urgency: "emergency" | "urgent" | "routine" = "routine";
-      let recommendedAction = "Continue prescribed care routine and visit your nearest Sub-Centre / PHC for routine health rounds.";
+      const result = await invokeGeminiChat({
+        prompt: input.message,
+        role: userRole,
+        language: input.language as SupportedLanguage,
+        district: userDistrict,
+        facilityName,
+        patientContext: input.patientContext,
+      });
 
-      if (isEmergency) {
-        urgency = "emergency";
-        reply = input.language === "gu"
-          ? "તાત્કાલિક ચેતવણી: આ લક્ષણો તાત્કાલિક તબીબી કટોકટી હોઈ શકે છે. વિલંબ કર્યા વિના 108 એમ્બ્યુલન્સને કૉલ કરો અથવા નજીકના CHC / સિવિલ હોસ્પિટલ પહોંચો."
-          : input.language === "hi"
-            ? "आपातकालीन चेतावनी: ये लक्षण गंभीर स्थिति का संकेत हो सकते हैं। कृपया तुरंत 108 एम्बुलेंस को कॉल करें या निकटतम CHC / अस्पताल जाएं।"
-            : "EMERGENCY ALERT: These symptoms require immediate clinical attention. Please call 108 ambulance or proceed to the nearest CHC / District Hospital immediately.";
-        recommendedAction = "Call 108 Emergency Medical Service. Do not exert physically.";
-      } else if (isHypertension) {
-        urgency = "urgent";
-        reply = input.language === "gu"
-          ? "બ્લડ પ્રેશર સંભાળ: સવાર-સાંજ BP માપણી કરાવો, મીઠું ઓછું કરો અને તમારી દવાનું નિયમિત સેવન કરો. જો માથાનો દુખાવો કે ચક્કર વધે તો તાત્કાલિક PHC પર તપાસ કરાવો."
-          : input.language === "hi"
-            ? "रक्तचाप सलाह: नियमित रूप से बीपी की जांच करवाएं, नमक का सेवन कम करें और समय पर दवाएं लें। यदि चक्कर आए तो तुरंत आशा कार्यकर्ता या पीएचसी से संपर्क करें।"
-            : "Hypertension Care: Monitor blood pressure twice daily, maintain low sodium intake, take prescribed Telmisartan/Amlodipine on time, and avoid skipping doses.";
-        recommendedAction = "Schedule BP check at Sundarpur PHC or request ASHA home visit.";
-      } else if (isDiabetes) {
-        urgency = "routine";
-        reply = input.language === "gu"
-          ? "ડાયાબિટીસ માર્ગદર્શન: ભોજન પછી નિયમિત દવા લો, વધુ પાણી પીવો અને ખાંડયુક્ત આહારથી બચો. નિયમિત સુગર ચેકઅપ માટે PHC ની મુલાકાત લો."
-          : input.language === "hi"
-            ? "मधुमेह मार्गदर्शन: भोजन के बाद दवा का सेवन करें, पर्याप्त पानी पिएं और मीठे से परहेज करें। नियमित शुगर जांच के लिए प्राथमिक स्वास्थ्य केंद्र जाएं।"
-            : "Glycemic Management: Take Metformin strictly after meals, maintain high-fiber diet, stay well-hydrated, and track fasting glucose weekly.";
-        recommendedAction = "Book fasting blood sugar test at nearest AAM / Sub-Centre.";
-      } else if (isPregnancy) {
-        urgency = "routine";
-        reply = input.language === "gu"
-          ? "માતૃત્વ સંભાળ: દરરોજ આયર્ન-ફોલિક એસિડની ગોળીઓ લીંબુ પાણી સાથે લો (ચા કે દૂધ સાથે નહીં). પોષણયુક્ત આહાર લો અને તમામ ANC તપાસ સમયસર પૂર્ણ કરો."
-          : input.language === "hi"
-            ? "मातृ स्वास्थ्य सलाह: प्रतिदिन आयरन-फोलिक एसिड की गोलियां नींबू पानी के साथ लें। पौष्टिक आहार लें और अपनी सभी एएनसी जांच समय पर पूरी करें।"
-            : "Antenatal Care: Consume daily Iron & Folic Acid (IFA) tablets with citrus water. Ensure timely tetanus immunization and fetal wellness checkups.";
-        recommendedAction = "Ensure registration in Pradhan Mantri Matritva Vandana Yojana drive.";
-      } else {
-        reply = input.language === "gu"
-          ? `તમારા સ્વાસ્થ્ય પ્રશ્ન ("${input.message}") માટે: પુષ્કળ પાણી પીવો, પૂરતો આરામ કરો અને જો લક્ષણો 2 દિવસથી વધુ ચાલુ રહે તો તમારા આશા કાર્યકર અથવા સ્થાનિક PHC ડૉક્ટરનો સંપર્ક કરો.`
-          : input.language === "hi"
-            ? `आपके स्वास्थ्य प्रश्न ("${input.message}") के लिए: पर्याप्त आराम करें, स्वच्छ पानी पिएं और यदि 48 घंटे में आराम न मिले तो नजदीकी पीएचसी डॉक्टर से परामर्श लें।`
-            : `Health Guidance regarding "${input.message}": Rest adequately, maintain good hydration, avoid unprescribed self-medication, and consult your village ASHA or PHC medical officer if symptoms persist beyond 48 hours.`;
+      return result;
+    }),
+
+    clinicalAssistant: approvedProcedure.input(z.object({
+      query: z.string().min(1),
+      category: z.enum(["differential_diagnosis", "drug_interactions", "maternal_triage", "epidemiology", "general_clinical"]).default("general_clinical"),
+      language: z.enum(["en", "mr", "hi", "gu"]).default("en"),
+      patientContext: z.object({
+        name: z.string().optional(),
+        age: z.number().optional(),
+        gender: z.string().optional(),
+        vitals: z.string().optional(),
+        symptoms: z.string().optional(),
+        history: z.string().optional(),
+        currentMedications: z.string().optional(),
+        allergies: z.string().optional(),
+      }).optional(),
+    })).mutation(async ({ input, ctx }) => {
+      const userRole = (ctx.user?.role || "doctor") as AssistantRole;
+      const userDistrict = ctx.user?.district || undefined;
+
+      let promptPrefix = "";
+      if (input.category === "differential_diagnosis") {
+        promptPrefix = "[Clinical Differential & Evaluation Request]: ";
+      } else if (input.category === "drug_interactions") {
+        promptPrefix = "[Drug Interaction & Dosage Safety Check]: ";
+      } else if (input.category === "maternal_triage") {
+        promptPrefix = "[High Risk Pregnancy / Maternal Triage Protocol]: ";
+      } else if (input.category === "epidemiology") {
+        promptPrefix = "[District Health & Disease Surveillance Intelligence]: ";
       }
 
+      const result = await invokeGeminiChat({
+        prompt: `${promptPrefix}${input.query}`,
+        role: userRole,
+        language: input.language as SupportedLanguage,
+        district: userDistrict,
+        patientContext: {
+          name: input.patientContext?.name,
+          age: input.patientContext?.age,
+          gender: input.patientContext?.gender,
+          conditions: input.patientContext?.history,
+          recentVitals: input.patientContext?.vitals,
+          currentMedications: input.patientContext?.currentMedications,
+          allergies: input.patientContext?.allergies,
+        },
+      });
+
+      return result;
+    }),
+
+    getQuickPrompts: protectedProcedure.input(z.object({
+      role: z.enum(["citizen", "doctor", "asha", "cho", "facility_staff", "administrator", "super_admin", "admin"]).optional(),
+      language: z.enum(["en", "mr", "hi", "gu"]).default("en"),
+    })).query(({ input, ctx }) => {
+      const effectiveRole = (input.role || ctx.user?.role || "citizen") as AssistantRole;
       return {
-        reply,
-        urgency,
-        recommendedAction,
-        disclaimer: "Arjuna is clinical decision support and health guidance, not a formal medical diagnosis.",
-        timestamp: new Date(),
+        prompts: getQuickPromptsForRole(effectiveRole, input.language as SupportedLanguage),
       };
     }),
   }),

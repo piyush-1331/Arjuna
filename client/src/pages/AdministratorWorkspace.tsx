@@ -25,6 +25,7 @@ import {
 import { StaffApprovalsManagementView } from "@/components/StaffApprovalsManagementView";
 import { FacilitiesManagementView } from "@/components/FacilitiesManagementView";
 import { DistrictAdminsManagementView } from "@/components/DistrictAdminsManagementView";
+import { AdminIntelligenceAiView } from "@/components/AdminIntelligenceAiView";
 import {
   Activity,
   AlertCircle,
@@ -1070,26 +1071,38 @@ export default function AdministratorWorkspace() {
 
       {/* 9. AI INSIGHTS VIEW */}
       {activeTab === "ai_insights" && (
-        <div className="space-y-4">
-          {(aiInsights.data || []).map((item) => (
-            <Card key={item.id} className="border-0 shadow-xs bg-white">
-              <CardContent className="p-5 text-xs space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-blue-600" />
-                    <span className="font-bold text-sm text-slate-900">{item.title}</span>
-                  </div>
-                  <Badge className={item.severity === "critical" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}>
-                    {item.category} · {item.severity.toUpperCase()}
-                  </Badge>
-                </div>
-                <p className="text-slate-600 leading-relaxed">{item.description}</p>
-                <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3.5 text-blue-950 font-semibold">
-                  Directive Action: {item.recommendation}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+        <div className="space-y-6">
+          <AdminIntelligenceAiView
+            selectedDistrict={selectedDistrict}
+            isSuperAdmin={isSys}
+          />
+
+          <div className="pt-2">
+            <h3 className="display-font text-base font-bold text-slate-900 mb-3 flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-blue-600" />
+              Automated Epidemiological &amp; Supply Chain Directives
+            </h3>
+            <div className="space-y-3">
+              {(aiInsights.data || []).map((item) => (
+                <Card key={item.id} className="border-0 shadow-xs bg-white">
+                  <CardContent className="p-5 text-xs space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-slate-900">{item.title}</span>
+                      </div>
+                      <Badge className={item.severity === "critical" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"}>
+                        {item.category} · {item.severity.toUpperCase()}
+                      </Badge>
+                    </div>
+                    <p className="text-slate-600 leading-relaxed">{item.description}</p>
+                    <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3.5 text-blue-950 font-semibold">
+                      Directive Action: {item.recommendation}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
