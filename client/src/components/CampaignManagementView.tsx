@@ -47,6 +47,9 @@ import {
   Play,
   Pause,
   Check,
+  Ban,
+  Trash2,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -154,6 +157,7 @@ export function CampaignManagementView({
     "CHO In-Charge (Sanand PHC)",
   ]);
   const [formStatus, setFormStatus] = useState<"planned" | "active">("active");
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<{ id: number; name: string } | null>(null);
 
   // Queries
   const campaignsQuery = trpc.campaigns.getExecutiveSummary.useQuery(
@@ -192,6 +196,19 @@ export function CampaignManagementView({
     },
   });
 
+  const deleteMutation = trpc.campaigns.delete.useMutation({
+    onSuccess: (data: any) => {
+      toast.success(data?.message || "Campaign deleted successfully");
+      setIsDeleteModalOpen(null);
+      utils.campaigns.getExecutiveSummary.invalidate();
+      utils.campaigns.list.invalidate();
+      utils.commandCenter.getExecutiveSummary.invalidate();
+    },
+    onError: (err) => {
+      toast.error(`Failed to delete campaign: ${err.message}`);
+    },
+  });
+
   const recordScreeningMutation = trpc.campaigns.recordScreening.useMutation({
     onSuccess: () => {
       toast.success("Field screening recorded for campaign!");
@@ -201,6 +218,7 @@ export function CampaignManagementView({
 
   const campaignsData = campaignsQuery.data?.campaigns || [];
   const summary = campaignsQuery.data?.summary;
+  const isPending = createMutation.isPending || updateStatusMutation.isPending || deleteMutation.isPending;
   const prioritizedVillages = prioritizationQuery.data?.prioritizedVillages || [];
 
   // Filtered Campaigns
@@ -708,14 +726,14 @@ export function CampaignManagementView({
                   <Plus className="mr-1 h-3 w-3 text-emerald-600" /> Log Screening
                 </Button>
 
-                <div className="flex items-center gap-1.5">
-                  {c.status !== "active" && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {(c.status === "planned" || c.status === "paused") && (
                     <Button
                       size="sm"
                       onClick={() => updateStatusMutation.mutate({ id: c.id, status: "active" })}
                       className="rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] h-7 px-3 font-semibold"
                     >
-                      <Play className="mr-1 h-3 w-3" /> Set Active
+                      <Play className="mr-1 h-3 w-3" /> {c.status === "paused" ? "Resume" : "Set Active"}
                     </Button>
                   )}
 
@@ -729,6 +747,27 @@ export function CampaignManagementView({
                       <Check className="mr-1 h-3 w-3 text-emerald-600" /> Mark Completed
                     </Button>
                   )}
+
+                  {c.status === "active" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => updateStatusMutation.mutate({ id: c.id, status: "paused" })}
+                      className="rounded-full border-amber-300 text-amber-700 hover:bg-amber-50 text-[11px] h-7 px-2.5 font-semibold"
+                    >
+                      <Ban className="mr-1 h-3 w-3" /> Pause / Cancel
+                    </Button>
+                  )}
+
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setIsDeleteModalOpen({ id: c.id, name: c.name })}
+                    className="rounded-full text-rose-600 hover:text-rose-700 hover:bg-rose-50 text-xs h-7 px-2"
+                    title="Delete Campaign"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
               </div>
             </Card>
@@ -981,6 +1020,41 @@ export function CampaignManagementView({
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Campaign Confirmation Dialog */}
+      {isDeleteModalOpen && (
+        <Dialog open={Boolean(isDeleteModalOpen)} onOpenChange={() => setIsDeleteModalOpen(null)}>
+          <DialogContent className="sm:max-w-md rounded-3xl bg-white border border-slate-100 shadow-2xl p-6">
+            <DialogHeader>
+              <div className="flex items-center gap-2 text-rose-600">
+                <Trash2 className="h-5 w-5" />
+                <DialogTitle className="text-base font-bold text-slate-900">Delete Campaign</DialogTitle>
+              </div>
+              <DialogDescription className="text-xs text-slate-600 pt-2">
+                Are you sure you want to delete the health drive <strong>"{isDeleteModalOpen.name}"</strong>? This will permanently remove its field screening targets, outreach metrics, and assigned worker schedules.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="pt-4 flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsDeleteModalOpen(null)}
+                className="rounded-full text-xs"
+              >
+                Keep Campaign
+              </Button>
+              <Button
+                type="button"
+                onClick={() => deleteMutation.mutate({ id: isDeleteModalOpen.id })}
+                disabled={deleteMutation.isPending}
+                className="rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold"
+              >
+                {deleteMutation.isPending ? "Deleting..." : "Delete Permanently"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

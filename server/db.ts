@@ -3288,6 +3288,109 @@ export async function updateAppointmentStatus(id: number, status: "scheduled" | 
   return { success: true };
 }
 
+export async function cancelAppointment(id: number, reason?: string) {
+  const a = memAppointments.find(x => x.id === id);
+  if (a) {
+    a.status = "cancelled";
+    if (reason) a.notes = a.notes ? `${a.notes} [Cancelled: ${reason}]` : `[Cancelled: ${reason}]`;
+  }
+  const db = await getDb();
+  if (db) {
+    try {
+      await db.update(appointments).set({ status: "cancelled", notes: a?.notes }).where(eq(appointments.id, id));
+    } catch { /* non-fatal */ }
+  }
+  return { success: true };
+}
+
+export async function deleteAppointment(id: number) {
+  const idx = memAppointments.findIndex(x => x.id === id);
+  if (idx !== -1) {
+    memAppointments.splice(idx, 1);
+  }
+  const db = await getDb();
+  if (db) {
+    try {
+      await db.delete(appointments).where(eq(appointments.id, id));
+    } catch { /* non-fatal */ }
+  }
+  if (supabaseDb.isSupabaseDataConfigured()) {
+    try {
+      await supabaseDb.deleteAppointment(id);
+    } catch { /* non-fatal */ }
+  }
+  return { success: true };
+}
+
+export async function deletePatient(id: number) {
+  const idx = memPatients.findIndex(x => x.id === id);
+  if (idx !== -1) {
+    memPatients.splice(idx, 1);
+  }
+  const db = await getDb();
+  if (db) {
+    try {
+      await db.delete(patients).where(eq(patients.id, id));
+    } catch { /* non-fatal */ }
+  }
+  if (supabaseDb.isSupabaseDataConfigured()) {
+    try {
+      await supabaseDb.deletePatient(id);
+    } catch { /* non-fatal */ }
+  }
+  return { success: true };
+}
+
+export async function cancelPrescription(id: number, reason?: string) {
+  const p = memPrescriptions.find(x => x.id === id);
+  if (p) {
+    p.status = "discontinued";
+    if (reason) p.instructions = p.instructions ? `${p.instructions} [Discontinued: ${reason}]` : `[Discontinued: ${reason}]`;
+  }
+  const db = await getDb();
+  if (db) {
+    try {
+      await db.update(prescriptions).set({ status: "discontinued" }).where(eq(prescriptions.id, id));
+    } catch { /* non-fatal */ }
+  }
+  return { success: true, prescription: p };
+}
+
+export async function deletePrescription(id: number) {
+  const idx = memPrescriptions.findIndex(x => x.id === id);
+  if (idx !== -1) {
+    memPrescriptions.splice(idx, 1);
+  }
+  const db = await getDb();
+  if (db) {
+    try {
+      await db.delete(prescriptions).where(eq(prescriptions.id, id));
+    } catch { /* non-fatal */ }
+  }
+  return { success: true };
+}
+
+export async function deleteCampaign(id: number) {
+  const idx = memCampaigns.findIndex(x => x.id === id);
+  if (idx !== -1) {
+    memCampaigns.splice(idx, 1);
+  }
+  return { success: true };
+}
+
+export async function deleteReferral(id: number) {
+  const idx = memReferrals.findIndex(x => x.id === id);
+  if (idx !== -1) {
+    memReferrals.splice(idx, 1);
+  }
+  if (supabaseDb.isSupabaseDataConfigured()) {
+    try {
+      await supabaseDb.deleteReferral(id);
+    } catch { /* non-fatal */ }
+  }
+  return { success: true };
+}
+
 export async function getCampaigns(district?: string) {
   if (district) return memCampaigns.filter(c => c.district === district);
   return [...memCampaigns];

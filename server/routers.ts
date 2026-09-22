@@ -58,6 +58,13 @@ import {
   seedDemoData,
   completeFollowUp,
   updateAppointmentStatus,
+  cancelAppointment,
+  deleteAppointment,
+  deletePatient,
+  deletePrescription,
+  cancelPrescription,
+  deleteCampaign,
+  deleteReferral,
   updateMedicine,
   addMedicine,
   updateMedicineStock,
@@ -840,6 +847,28 @@ export const appRouter = router({
       if (!profile) throw new Error("Patient profile not found");
       return profile;
     }),
+    delete: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input, ctx }) => {
+      const patient = await getPatientById(input.id);
+      if (!patient) throw new TRPCError({ code: "NOT_FOUND", message: "Patient record not found." });
+
+      if (ctx.user.role === "citizen") {
+        if (patient.userId !== ctx.user.id) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "You can only remove your own registered family members." });
+        }
+      } else if (!hasRole(ctx.user.role, "asha", "cho", "doctor", "facility_staff", "administrator", "super_admin", "admin")) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Insufficient permissions to delete patient records." });
+      }
+
+      await deletePatient(input.id);
+      await createAuditEvent({
+        actorId: ctx.user.id,
+        action: "patient.deleted",
+        entityType: "patient",
+        entityId: input.id,
+        detail: `Deleted patient/family member ${patient.name} (#${input.id})`,
+      });
+      return { success: true, message: "Member record removed successfully" };
+    }),
   }),
   visits: router({
     create: protectedProcedure.input(z.object({
@@ -1317,6 +1346,48 @@ export const appRouter = router({
       });
 
       return { success: true, referral: updated };
+    }),
+
+    cancel: protectedProcedure.input(z.object({
+      id: z.number().int().positive(),
+      reason: z.string().optional(),
+    })).mutation(async ({ input, ctx }) => {
+      const canonicalStatus = "CANCELLED";
+      const updated = await updateReferralLifecycleStatus(input.id, {
+        status: canonicalStatus,
+        actorId: ctx.user.id,
+        actorRole: ctx.user.role,
+        actorName: ctx.user.name || undefined,
+        notes: input.reason || "Cancelled by user",
+        cancellationReason: input.reason || "Cancelled by user",
+      });
+
+      await createAuditEvent({
+        actorId: ctx.user.id,
+        action: "referral.cancelled",
+        entityType: "referral",
+        entityId: input.id,
+        detail: `Referral #${input.id} cancelled. Reason: ${input.reason || "None"}`,
+      });
+
+      return { success: true, message: "Referral cancelled successfully", referral: updated };
+    }),
+
+    delete: protectedProcedure.input(z.object({
+      id: z.number().int().positive(),
+    })).mutation(async ({ input, ctx }) => {
+      if (!hasRole(ctx.user.role, "citizen", "doctor", "facility_staff", "administrator", "super_admin", "admin", "asha_cho", "asha", "cho")) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only care-team workers and administrators can delete referrals." });
+      }
+      await deleteReferral(input.id);
+      await createAuditEvent({
+        actorId: ctx.user.id,
+        action: "referral.deleted",
+        entityType: "referral",
+        entityId: input.id,
+        detail: `Referral #${input.id} deleted by ${ctx.user.name || ctx.user.role}`,
+      });
+      return { success: true, message: "Referral record deleted successfully" };
     }),
   }),
   followUps: router({
@@ -2402,6 +2473,50 @@ export const appRouter = router({
 
       return res;
     }),
+
+    cancel: protectedProcedure.input(z.object({
+      id: z.number().int().positive(),
+      reason: z.string().optional(),
+    })).mutation(async ({ input, ctx }) => {
+      const existing = await getPrescriptionById(input.id);
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Prescription not found." });
+
+      if (ctx.user.role === "citizen") {
+        const userPatients = await getPatientsForUser(ctx.user.id, "citizen");
+        const allowed = userPatients.some(p => p.id === existing.patientId);
+        if (!allowed) throw new TRPCError({ code: "FORBIDDEN", message: "You can only discontinue your own prescriptions." });
+      }
+
+      const res = await cancelPrescription(input.id, input.reason);
+      await createAuditEvent({
+        actorId: ctx.user.id,
+        action: "prescription.cancelled",
+        entityType: "prescription",
+        entityId: input.id,
+        detail: `Prescription #${input.id} for ${existing.medicineName} was cancelled/discontinued. Reason: ${input.reason || "Patient / Doctor request"}`,
+      });
+      return res;
+    }),
+
+    delete: protectedProcedure.input(z.object({
+      id: z.number().int().positive(),
+    })).mutation(async ({ input, ctx }) => {
+      if (!hasRole(ctx.user.role, "doctor", "administrator", "super_admin", "admin")) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only doctors and administrators can delete prescriptions." });
+      }
+      const existing = await getPrescriptionById(input.id);
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Prescription not found." });
+
+      await deletePrescription(input.id);
+      await createAuditEvent({
+        actorId: ctx.user.id,
+        action: "prescription.deleted",
+        entityType: "prescription",
+        entityId: input.id,
+        detail: `Prescription #${input.id} (${existing.medicineName}) permanently deleted by ${ctx.user.name || ctx.user.role}`,
+      });
+      return { success: true, message: "Prescription record deleted successfully" };
+    }),
   }),
   appointments: router({
     list: protectedProcedure.input(z.object({ patientId: z.number().int().positive().optional() }).optional()).query(async ({ input, ctx }) => {
@@ -2489,7 +2604,7 @@ export const appRouter = router({
       id: z.number().int().positive(),
       status: z.enum(["scheduled", "in_consultation", "completed", "cancelled"]),
     })).mutation(async ({ input, ctx }) => {
-      if (!hasRole(ctx.user.role, "doctor", "facility_staff", "administrator", "asha_cho")) {
+      if (!hasRole(ctx.user.role, "doctor", "facility_staff", "administrator", "asha_cho", "admin", "super_admin")) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Only care-team personnel can update appointment status." });
       }
       const res = await updateAppointmentStatus(input.id, input.status);
@@ -2501,6 +2616,53 @@ export const appRouter = router({
         detail: `Appointment #${input.id} status transitioned to ${input.status}`,
       });
       return res;
+    }),
+    cancel: protectedProcedure.input(z.object({
+      id: z.number().int().positive(),
+      reason: z.string().optional(),
+    })).mutation(async ({ input, ctx }) => {
+      const apptList = await getAppointments();
+      const appt = apptList.find(a => a.id === input.id);
+      if (!appt) throw new TRPCError({ code: "NOT_FOUND", message: "Appointment not found." });
+
+      if (ctx.user.role === "citizen") {
+        const userPatients = await getPatientsForUser(ctx.user.id, "citizen");
+        const allowed = userPatients.some(p => p.id === appt.patientId);
+        if (!allowed) throw new TRPCError({ code: "FORBIDDEN", message: "You can only cancel your own appointments." });
+      }
+
+      const res = await cancelAppointment(input.id, input.reason);
+      await createAuditEvent({
+        actorId: ctx.user.id,
+        action: "appointment.cancelled",
+        entityType: "appointment",
+        entityId: input.id,
+        detail: `Appointment #${input.id} cancelled by ${ctx.user.name || ctx.user.role}. Reason: ${input.reason || "User request"}`,
+      });
+      return res;
+    }),
+    delete: protectedProcedure.input(z.object({
+      id: z.number().int().positive(),
+    })).mutation(async ({ input, ctx }) => {
+      const apptList = await getAppointments();
+      const appt = apptList.find(a => a.id === input.id);
+      if (!appt) throw new TRPCError({ code: "NOT_FOUND", message: "Appointment not found." });
+
+      if (ctx.user.role === "citizen") {
+        const userPatients = await getPatientsForUser(ctx.user.id, "citizen");
+        const allowed = userPatients.some(p => p.id === appt.patientId);
+        if (!allowed) throw new TRPCError({ code: "FORBIDDEN", message: "You can only delete your own appointments." });
+      }
+
+      await deleteAppointment(input.id);
+      await createAuditEvent({
+        actorId: ctx.user.id,
+        action: "appointment.deleted",
+        entityType: "appointment",
+        entityId: input.id,
+        detail: `Appointment #${input.id} permanently deleted by ${ctx.user.name || ctx.user.role}`,
+      });
+      return { success: true, message: "Appointment deleted successfully" };
     }),
   }),
   campaigns: router({
@@ -2609,6 +2771,22 @@ export const appRouter = router({
       )
       .mutation(async ({ input }) => {
         return recordCampaignScreening(input.campaignId, input.highRisk);
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ input, ctx }) => {
+        if (!hasRole(ctx.user.role, "cho", "administrator", "super_admin", "admin")) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Only administrators and CHO officers can delete campaigns." });
+        }
+        await deleteCampaign(input.id);
+        await createAuditEvent({
+          actorId: ctx.user.id,
+          action: "campaign.deleted",
+          entityType: "campaign",
+          entityId: input.id,
+          detail: `Campaign #${input.id} deleted by ${ctx.user.name || ctx.user.role}`,
+        });
+        return { success: true, message: "Campaign deleted successfully" };
       }),
   }),
   facilities: router({

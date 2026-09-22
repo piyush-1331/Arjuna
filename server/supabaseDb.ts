@@ -1180,6 +1180,39 @@ export async function createAppointment(input: Record<string, unknown>) {
   }
 }
 
+export async function deleteAppointment(id: number) {
+  try {
+    const res = await client().from("appointments").delete().eq("id", id);
+    if (res.error && !isMissingColumnError(res.error)) {
+      console.warn("[Supabase] deleteAppointment error:", res.error.message);
+    }
+  } catch (err) {
+    if (!isMissingColumnError(err)) console.warn("[Supabase] deleteAppointment warning:", err);
+  }
+}
+
+export async function deletePatient(id: number) {
+  try {
+    const res = await client().from("patients").delete().eq("id", id);
+    if (res.error && !isMissingColumnError(res.error)) {
+      console.warn("[Supabase] deletePatient error:", res.error.message);
+    }
+  } catch (err) {
+    if (!isMissingColumnError(err)) console.warn("[Supabase] deletePatient warning:", err);
+  }
+}
+
+export async function deleteReferral(id: number) {
+  try {
+    const res = await client().from("referrals").delete().eq("id", id);
+    if (res.error && !isMissingColumnError(res.error)) {
+      console.warn("[Supabase] deleteReferral error:", res.error.message);
+    }
+  } catch (err) {
+    if (!isMissingColumnError(err)) console.warn("[Supabase] deleteReferral warning:", err);
+  }
+}
+
 export async function seedDemoData() {
   const count: any[] = many(unwrap(await client().from("patients").select("id").limit(1)));
   if (count.length) return;

@@ -145,6 +145,13 @@ export default function DoctorWorkspace() {
   const [cancelFollowUpModal, setCancelFollowUpModal] = useState<{ id: number; patientName: string; reason: string } | null>(null);
   const [cancelReasonText, setCancelReasonText] = useState("");
 
+  // Action Confirmation Dialog States
+  const [cancelApptModal, setCancelApptModal] = useState<{ id: number; patientName?: string; reason: string } | null>(null);
+  const [deleteApptModal, setDeleteApptModal] = useState<{ id: number; patientName?: string } | null>(null);
+  const [deletePrescModal, setDeletePrescModal] = useState<{ id: number; medicineName?: string } | null>(null);
+  const [cancelReferralModal, setCancelReferralModal] = useState<{ id: number; patientName?: string; reason: string } | null>(null);
+  const [deleteReferralModal, setDeleteReferralModal] = useState<{ id: number; patientName?: string } | null>(null);
+
   // Queries
   const utils = trpc.useUtils();
   const overview = trpc.dashboard.overview.useQuery(undefined, { enabled: isAuthenticated });
@@ -307,6 +314,55 @@ export default function DoctorWorkspace() {
       utils.dashboard.overview.invalidate();
     },
     onError: (err) => toast.error(err.message),
+  });
+
+  const cancelAppointmentMutation = trpc.appointments.cancel.useMutation({
+    onSuccess: (data: any) => {
+      toast.success(data?.message || "Appointment cancelled");
+      utils.appointments.list.invalidate();
+      utils.dashboard.overview.invalidate();
+      setCancelApptModal(null);
+    },
+    onError: (err: any) => toast.error(err?.message || "Failed to cancel appointment"),
+  });
+
+  const deleteAppointmentMutation = trpc.appointments.delete.useMutation({
+    onSuccess: (data: any) => {
+      toast.success(data?.message || "Appointment deleted");
+      utils.appointments.list.invalidate();
+      utils.dashboard.overview.invalidate();
+      setDeleteApptModal(null);
+    },
+    onError: (err: any) => toast.error(err?.message || "Failed to delete appointment"),
+  });
+
+  const deletePrescriptionMutation = trpc.prescriptions.delete.useMutation({
+    onSuccess: (data: any) => {
+      toast.success(data?.message || "Prescription record deleted");
+      utils.prescriptions.list.invalidate();
+      setDeletePrescModal(null);
+    },
+    onError: (err: any) => toast.error(err?.message || "Failed to delete prescription"),
+  });
+
+  const cancelReferralMutation = trpc.referrals.cancel.useMutation({
+    onSuccess: (data: any) => {
+      toast.success(data?.message || "Referral cancelled");
+      utils.referrals.list.invalidate();
+      utils.dashboard.overview.invalidate();
+      setCancelReferralModal(null);
+    },
+    onError: (err: any) => toast.error(err?.message || "Failed to cancel referral"),
+  });
+
+  const deleteReferralMutation = trpc.referrals.delete.useMutation({
+    onSuccess: (data: any) => {
+      toast.success(data?.message || "Referral record deleted");
+      utils.referrals.list.invalidate();
+      utils.dashboard.overview.invalidate();
+      setDeleteReferralModal(null);
+    },
+    onError: (err: any) => toast.error(err?.message || "Failed to delete referral"),
   });
 
   const highRiskCases = (patients.data || []).filter((p) => p.riskCategory === "high" || p.riskCategory === "critical");
@@ -524,16 +580,48 @@ export default function DoctorWorkspace() {
                       {a.notes && <p className="text-slate-600 mt-1">Chief Note: {a.notes}</p>}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge
+                      className={
+                        a.status === "scheduled" || !a.status
+                          ? "bg-emerald-100 text-emerald-800"
+                          : a.status === "cancelled"
+                          ? "bg-rose-100 text-rose-800"
+                          : "bg-slate-200 text-slate-700"
+                      }
+                    >
+                      {a.status?.toUpperCase() || "SCHEDULED"}
+                    </Badge>
+                    {a.status !== "cancelled" && (
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setConsultForm({ ...consultForm, patientId: a.patientId });
+                          setActiveTab("consultations");
+                        }}
+                        className="rounded-full bg-[#15181b] text-white text-xs font-semibold"
+                      >
+                        Start Consultation
+                      </Button>
+                    )}
+                    {a.status !== "cancelled" && a.status !== "completed" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setCancelApptModal({ id: a.id, patientName: a.patientName, reason: "" })}
+                        className="rounded-full border-amber-300 text-amber-700 hover:bg-amber-50 text-xs font-semibold h-8"
+                      >
+                        <Ban className="h-3 w-3 mr-1" /> Cancel
+                      </Button>
+                    )}
                     <Button
                       size="sm"
-                      onClick={() => {
-                        setConsultForm({ ...consultForm, patientId: a.patientId });
-                        setActiveTab("consultations");
-                      }}
-                      className="rounded-full bg-[#15181b] text-white text-xs"
+                      variant="ghost"
+                      onClick={() => setDeleteApptModal({ id: a.id, patientName: a.patientName })}
+                      className="rounded-full text-rose-600 hover:text-rose-700 hover:bg-rose-50 text-xs h-8 px-2.5"
+                      title="Delete Appointment Record"
                     >
-                      Start Consultation
+                      <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
                 </div>
@@ -1672,7 +1760,7 @@ export default function DoctorWorkspace() {
 
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-[11px] text-slate-400">
                       <span>Initiated: {new Date(r.createdAt).toLocaleString()}</span>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <Button
                           size="sm"
                           variant="outline"
@@ -1682,15 +1770,34 @@ export default function DoctorWorkspace() {
                           <Clock className="mr-1 h-3 w-3" /> Event Timeline
                         </Button>
                         {r.status !== "COMPLETED" && r.status !== "CANCELLED" && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setOutcomeDialog({ id: r.id, patientName: r.patientName, reason: r.reason })}
-                            className="rounded-full text-[11px] h-7 px-3"
-                          >
-                            Document Outcome
-                          </Button>
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setOutcomeDialog({ id: r.id, patientName: r.patientName, reason: r.reason })}
+                              className="rounded-full text-[11px] h-7 px-3"
+                            >
+                              Document Outcome
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setCancelReferralModal({ id: r.id, patientName: r.patientName, reason: "" })}
+                              className="rounded-full border-amber-300 text-amber-700 hover:bg-amber-50 text-[11px] h-7 px-2.5"
+                            >
+                              <Ban className="h-3 w-3 mr-1" /> Cancel
+                            </Button>
+                          </>
                         )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setDeleteReferralModal({ id: r.id, patientName: r.patientName })}
+                          className="rounded-full text-rose-600 hover:text-rose-700 hover:bg-rose-50 text-xs h-7 px-2"
+                          title="Delete Referral Record"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -1805,6 +1912,15 @@ export default function DoctorWorkspace() {
                           </Button>
                         </div>
                       )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setDeletePrescModal({ id: p.id, medicineName: p.medicineName })}
+                        className="rounded-full text-rose-600 hover:text-rose-700 hover:bg-rose-50 text-xs h-7 px-2"
+                        title="Delete Prescription Record"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
                   </div>
                 ))}
@@ -3082,6 +3198,198 @@ export default function DoctorWorkspace() {
                     </div>
                   ))
                 )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+      {/* MODAL: Cancel Appointment */}
+      {cancelApptModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <Card className="w-full max-w-md border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-900 animate-in zoom-in-95">
+            <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-amber-600">
+                <Ban className="h-5 w-5" />
+                <CardTitle className="text-base font-bold text-slate-900 dark:text-slate-100">Cancel OPD Appointment</CardTitle>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setCancelApptModal(null)} className="rounded-full">
+                <X className="h-4 w-4" />
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-4 text-xs">
+              <p className="text-slate-600 dark:text-slate-300">
+                Cancel scheduled consultation appointment for <strong>{cancelApptModal.patientName || "patient"}</strong>?
+              </p>
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Reason for Cancellation</label>
+                <Input
+                  value={cancelApptModal.reason}
+                  onChange={(e) => setCancelApptModal({ ...cancelApptModal, reason: e.target.value })}
+                  placeholder="e.g. Doctor emergency duty, patient no-show, rescheduled"
+                  className="text-xs"
+                />
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <Button variant="outline" size="sm" onClick={() => setCancelApptModal(null)} className="rounded-full text-xs">
+                  Keep Appointment
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => cancelAppointmentMutation.mutate({ id: cancelApptModal.id, reason: cancelApptModal.reason || "Doctor cancelled" })}
+                  disabled={cancelAppointmentMutation.isPending}
+                  className="rounded-full bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold"
+                >
+                  {cancelAppointmentMutation.isPending ? "Cancelling..." : "Confirm Cancellation"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* MODAL: Delete Appointment */}
+      {deleteApptModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <Card className="w-full max-w-md border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-900 animate-in zoom-in-95">
+            <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-rose-600">
+                <Trash2 className="h-5 w-5" />
+                <CardTitle className="text-base font-bold text-slate-900 dark:text-slate-100">Delete Appointment Record</CardTitle>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setDeleteApptModal(null)} className="rounded-full">
+                <X className="h-4 w-4" />
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-4 text-xs">
+              <p className="text-slate-600 dark:text-slate-300">
+                Permanently delete this appointment record for <strong>{deleteApptModal.patientName || "patient"}</strong> from OPD queue records.
+              </p>
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <Button variant="outline" size="sm" onClick={() => setDeleteApptModal(null)} className="rounded-full text-xs">
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => deleteAppointmentMutation.mutate({ id: deleteApptModal.id })}
+                  disabled={deleteAppointmentMutation.isPending}
+                  className="rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold"
+                >
+                  {deleteAppointmentMutation.isPending ? "Deleting..." : "Delete Permanently"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* MODAL: Delete Prescription */}
+      {deletePrescModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <Card className="w-full max-w-md border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-900 animate-in zoom-in-95">
+            <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-rose-600">
+                <Trash2 className="h-5 w-5" />
+                <CardTitle className="text-base font-bold text-slate-900 dark:text-slate-100">Delete Prescription Record</CardTitle>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setDeletePrescModal(null)} className="rounded-full">
+                <X className="h-4 w-4" />
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-4 text-xs">
+              <p className="text-slate-600 dark:text-slate-300">
+                Permanently delete prescription order for <strong>{deletePrescModal.medicineName}</strong>.
+              </p>
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <Button variant="outline" size="sm" onClick={() => setDeletePrescModal(null)} className="rounded-full text-xs">
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => deletePrescriptionMutation.mutate({ id: deletePrescModal.id })}
+                  disabled={deletePrescriptionMutation.isPending}
+                  className="rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold"
+                >
+                  {deletePrescriptionMutation.isPending ? "Deleting..." : "Delete Permanently"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* MODAL: Cancel Referral */}
+      {cancelReferralModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <Card className="w-full max-w-md border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-900 animate-in zoom-in-95">
+            <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-amber-600">
+                <Ban className="h-5 w-5" />
+                <CardTitle className="text-base font-bold text-slate-900 dark:text-slate-100">Cancel Inter-Facility Referral</CardTitle>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setCancelReferralModal(null)} className="rounded-full">
+                <X className="h-4 w-4" />
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-4 text-xs">
+              <p className="text-slate-600 dark:text-slate-300">
+                Cancel referral order for <strong>{cancelReferralModal.patientName || "patient"}</strong>?
+              </p>
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Reason for Cancellation</label>
+                <Input
+                  value={cancelReferralModal.reason}
+                  onChange={(e) => setCancelReferralModal({ ...cancelReferralModal, reason: e.target.value })}
+                  placeholder="e.g. Condition stabilized locally, patient refused transfer"
+                  className="text-xs"
+                />
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <Button variant="outline" size="sm" onClick={() => setCancelReferralModal(null)} className="rounded-full text-xs">
+                  Keep Referral
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => cancelReferralMutation.mutate({ id: cancelReferralModal.id, reason: cancelReferralModal.reason || "Doctor cancelled" })}
+                  disabled={cancelReferralMutation.isPending}
+                  className="rounded-full bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold"
+                >
+                  {cancelReferralMutation.isPending ? "Cancelling..." : "Confirm Cancellation"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* MODAL: Delete Referral */}
+      {deleteReferralModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <Card className="w-full max-w-md border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-900 animate-in zoom-in-95">
+            <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-rose-600">
+                <Trash2 className="h-5 w-5" />
+                <CardTitle className="text-base font-bold text-slate-900 dark:text-slate-100">Delete Referral Record</CardTitle>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setDeleteReferralModal(null)} className="rounded-full">
+                <X className="h-4 w-4" />
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-4 text-xs">
+              <p className="text-slate-600 dark:text-slate-300">
+                Permanently delete referral record for <strong>{deleteReferralModal.patientName || "patient"}</strong>.
+              </p>
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <Button variant="outline" size="sm" onClick={() => setDeleteReferralModal(null)} className="rounded-full text-xs">
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => deleteReferralMutation.mutate({ id: deleteReferralModal.id })}
+                  disabled={deleteReferralMutation.isPending}
+                  className="rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold"
+                >
+                  {deleteReferralMutation.isPending ? "Deleting..." : "Delete Record"}
+                </Button>
               </div>
             </CardContent>
           </Card>

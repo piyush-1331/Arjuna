@@ -216,6 +216,7 @@ export default function AshaChoWorkspace() {
     notes: "Patient adhered to daily morning medication. Blood pressure stable. No dizziness or edema observed.",
   });
   const [ashaFollowUpFilter, setAshaFollowUpFilter] = useState<string>("ALL");
+  const [deletePatientModal, setDeletePatientModal] = useState<{ id: number; name: string } | null>(null);
 
   // tRPC queries & mutations
   const utils = trpc.useUtils();
@@ -295,6 +296,17 @@ export default function AshaChoWorkspace() {
       utils.patients.list.invalidate();
       utils.households.list.invalidate();
       if (selectedPatientId) utils.patients.getProfile.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const deletePatientMutation = trpc.patients.delete.useMutation({
+    onSuccess: (data: any) => {
+      toast.success(data?.message || "Beneficiary record removed");
+      utils.patients.list.invalidate();
+      utils.households.list.invalidate();
+      utils.dashboard.overview.invalidate();
+      setDeletePatientModal(null);
     },
     onError: (err) => toast.error(err.message),
   });
@@ -915,6 +927,15 @@ export default function AshaChoWorkspace() {
                       className="rounded-full text-xs text-rose-700 border-rose-200 hover:bg-rose-50"
                     >
                       <HeartPulse className="mr-1 h-3.5 w-3.5" /> Screen
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setDeletePatientModal({ id: p.id, name: p.name })}
+                      className="rounded-full text-xs p-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                      title="Delete Beneficiary Record"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
                 </CardContent>
@@ -3019,6 +3040,42 @@ export default function AshaChoWorkspace() {
                   className="w-2/3 rounded-full bg-[#15181b] text-white hover:bg-black font-semibold text-xs shadow-sm"
                 >
                   {confirmReferral.isPending ? "Confirming & Alerting Facility…" : "Confirm Facility & Dispatch 108"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* MODAL: Delete Beneficiary Record */}
+      {deletePatientModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <Card className="w-full max-w-md border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-900 animate-in zoom-in-95">
+            <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-rose-600">
+                <Trash2 className="h-5 w-5" />
+                <CardTitle className="text-base font-bold text-slate-900 dark:text-slate-100">Delete Beneficiary Record</CardTitle>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setDeletePatientModal(null)} className="rounded-full">
+                <X className="h-4 w-4" />
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-4 text-xs">
+              <p className="text-slate-600 dark:text-slate-300">
+                Are you sure you want to permanently delete the village health record for <strong>{deletePatientModal.name}</strong>?
+                This removes their registered profile, medical history, and related records from the roster.
+              </p>
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <Button variant="outline" size="sm" onClick={() => setDeletePatientModal(null)} className="rounded-full text-xs">
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => deletePatientMutation.mutate({ id: deletePatientModal.id })}
+                  disabled={deletePatientMutation.isPending}
+                  className="rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold"
+                >
+                  {deletePatientMutation.isPending ? "Deleting..." : "Delete Beneficiary"}
                 </Button>
               </div>
             </CardContent>
