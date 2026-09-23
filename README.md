@@ -615,25 +615,25 @@ All 36 Maharashtra District Administrators are pre-configured with standardized 
 
 ```mermaid
 flowchart TD
-    Start[User Submits Registration Form] --> CheckRole{Selected Role}
+    Start["User Submits Registration Form"] --> CheckRole{"Selected Role"}
     
-    CheckRole -->|Citizen| CitApprove[Status: APPROVED]
-    CitApprove --> CitDash[Direct Access to /dashboard/citizen]
+    CheckRole -->|Citizen| CitApprove["Status: APPROVED"]
+    CitApprove --> CitDash["Direct Access to /dashboard/citizen"]
     
-    CheckRole -->|ASHA / CHO / Doctor / Staff| StaffPending[Status: PENDING]
-    StaffPending --> PendScreen[/pending-approval Screen - Access Blocked]
+    CheckRole -->|ASHA / CHO / Doctor / Staff| StaffPending["Status: PENDING"]
+    StaffPending --> PendScreen["/pending-approval Screen - Access Blocked"]
     
-    PendScreen --> AdminReview[District / Super Admin Reviews Credentials]
-    AdminReview --> Action{Admin Decision}
+    PendScreen --> AdminReview["District / Super Admin Reviews Credentials"]
+    AdminReview --> Action{"Admin Decision"}
     
-    Action -->|Approve| AppStatus[Status: APPROVED]
-    AppStatus --> FullAccess[Full Access to Role Workspace]
+    Action -->|Approve| AppStatus["Status: APPROVED"]
+    AppStatus --> FullAccess["Full Access to Role Workspace"]
     
-    Action -->|Reject| RejStatus[Status: REJECTED]
-    RejStatus --> RejScreen[/registration-rejected Screen]
+    Action -->|Reject| RejStatus["Status: REJECTED"]
+    RejStatus --> RejScreen["/registration-rejected Screen"]
     
-    Action -->|Suspend| SuspStatus[Status: SUSPENDED]
-    SuspStatus --> SuspScreen[/account-suspended Screen]
+    Action -->|Suspend| SuspStatus["Status: SUSPENDED"]
+    SuspStatus --> SuspScreen["/account-suspended Screen"]
 ```
 
 ### Self-Service Password Governance
