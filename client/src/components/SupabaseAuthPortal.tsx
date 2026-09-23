@@ -526,14 +526,13 @@ export default function SupabaseAuthPortal({ onAuthenticated }: Props) {
             <div>
               <div className="flex items-center gap-2">
                 <span className="display-font text-2xl font-extrabold tracking-tight">Arjuna</span>
-                <span className="rounded-md bg-[#15181b] px-2 py-0.5 text-xs font-bold text-white uppercase">AI</span>
               </div>
-              <p className="text-xs text-slate-500 font-medium">Universal Health Stack · Rural Care Platform</p>
+              <p className="text-xs text-slate-500 font-medium">Universal Health Stack · Clinical Decision & District Health</p>
             </div>
           </div>
 
           <h1 className="display-font text-3xl font-extrabold tracking-tight sm:text-5xl text-slate-900 leading-[1.1]">
-            Evidence-based healthcare coordination for rural communities.
+            Universal healthcare coordination & clinical decision support.
           </h1>
 
           <p className="text-sm leading-relaxed text-slate-600 max-w-lg">

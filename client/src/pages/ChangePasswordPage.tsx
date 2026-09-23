@@ -113,7 +113,6 @@ export default function ChangePasswordPage() {
             <div className="leading-tight">
               <div className="flex items-center gap-1.5">
                 <span className="display-font text-base font-extrabold tracking-tight">Arjuna</span>
-                <span className="rounded-md bg-[#15181b] px-1.5 py-0.5 text-[10px] font-bold text-white uppercase">AI</span>
               </div>
               <p className="text-[11px] font-medium text-slate-500">Security & Account</p>
             </div>

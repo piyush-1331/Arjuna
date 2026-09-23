@@ -107,7 +107,6 @@ export default function ResetPasswordPage() {
           <div>
             <div className="flex items-center gap-1.5">
               <span className="display-font text-2xl font-extrabold tracking-tight">Arjuna</span>
-              <span className="rounded-md bg-[#15181b] px-1.5 py-0.5 text-[10px] font-bold text-white uppercase">AI</span>
             </div>
             <p className="text-xs text-slate-500 font-medium">Reset Account Password</p>
           </div>
